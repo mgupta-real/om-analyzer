@@ -198,35 +198,35 @@ RULES:
 def analyze_om(pdf_text: str, api_key: str, progress_cb=None) -> dict:
     client = anthropic.Anthropic(api_key=api_key)
 
-      # Chunk large documents — keep at 140K to maximise context sent to Claude
+    # Chunk large documents — keep at 140K to maximise context sent to Claude
     MAX = 140_000
     text = pdf_text[:MAX]
     if len(pdf_text) > MAX and progress_cb:
         progress_cb("Large OM detected — using first 140K characters (covers most OMs fully)")
- 
+
     if progress_cb:
         progress_cb("Sending to Claude AI for analysis...")
- 
+
     resp = client.messages.create(
         model="claude-opus-4-5",
         max_tokens=16000,          # raised from 8000 — gives Claude enough room to finish the JSON
         system=SYSTEM,
         messages=[{"role": "user", "content": f"Analyze this OM:\n\n{text}"}]
     )
- 
+
     raw = resp.content[0].text.strip()
     # Strip any accidental markdown fences
     raw = re.sub(r"^```[a-z]*\n?", "", raw).rstrip("`").strip()
- 
+
     if progress_cb:
         progress_cb("Parsing extracted data...")
- 
+
     # Attempt 1 — clean parse
     try:
         return json.loads(raw)
     except json.JSONDecodeError:
         pass
- 
+
     # Attempt 2 — extract JSON object if there is leading/trailing noise
     try:
         m = re.search(r"\{.*\}", raw, re.DOTALL)
@@ -234,15 +234,15 @@ def analyze_om(pdf_text: str, api_key: str, progress_cb=None) -> dict:
             return json.loads(m.group())
     except json.JSONDecodeError:
         pass
- 
+
     # Attempt 3 — response was still truncated; close open structures and retry
     try:
         fixed = _fix_truncated_json(raw)
         return json.loads(fixed)
     except Exception:
         raise ValueError("Could not parse AI response. Please try again — this occasionally happens with very large OMs.")
- 
- 
+
+
 def _fix_truncated_json(raw: str) -> str:
     """Close any open strings, arrays and objects left by a truncated JSON response."""
     # First pass — close any open string
@@ -259,7 +259,7 @@ def _fix_truncated_json(raw: str) -> str:
             in_string = not in_string
     if in_string:
         raw += '"'
- 
+
     # Second pass — close unmatched brackets / braces
     opens = []
     in_str = False
@@ -279,9 +279,11 @@ def _fix_truncated_json(raw: str) -> str:
                 opens.append("}" if ch == "{" else "]")
             elif ch in "}]" and opens:
                 opens.pop()
- 
+
     raw += "".join(reversed(opens))
     return raw
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 # SECTION 3 — PDF REPORT GENERATOR
 # ══════════════════════════════════════════════════════════════════════════════
@@ -347,14 +349,19 @@ def _hdr(story, title, num):
 
 
 def _kv(rows, cw=None):
-    cw = cw or [2.8*inch, 4.7*inch]
-    data = [[_p(k, color=MID, size=8.5), _p(v or "N/A")] for k, v in rows]
+    cw = cw or [2.2*inch, 5.3*inch]
+    wrap_style = ParagraphStyle("kv", fontName="Helvetica", fontSize=9,
+                                textColor=DARK, leading=13, wordWrap="CJK")
+    key_style  = ParagraphStyle("kk", fontName="Helvetica", fontSize=8.5,
+                                textColor=MID, leading=13)
+    data = [[Paragraph(str(k), key_style),
+             Paragraph(str(v) if v else "N/A", wrap_style)] for k, v in rows]
     t = Table(data, colWidths=cw)
     t.setStyle(TableStyle([
         ("ROWBACKGROUNDS", (0,0),(-1,-1), [colors.white, ALT]),
         ("GRID",  (0,0),(-1,-1), 0.3, BORDER),
-        ("TOPPADDING",    (0,0),(-1,-1), 5),
-        ("BOTTOMPADDING", (0,0),(-1,-1), 5),
+        ("TOPPADDING",    (0,0),(-1,-1), 6),
+        ("BOTTOMPADDING", (0,0),(-1,-1), 6),
         ("LEFTPADDING",   (0,0),(-1,-1), 8),
         ("RIGHTPADDING",  (0,0),(-1,-1), 8),
         ("VALIGN", (0,0),(-1,-1), "TOP"),
@@ -364,13 +371,20 @@ def _kv(rows, cw=None):
 
 def _tbl(headers, rows, cw=None, hl_last=False):
     head = [_p(h, fontname="Helvetica-Bold", size=8, color=GOLD_L) for h in headers]
-    data = [head] + [[_p(str(c) if c is not None else "—", size=8.5) for c in row] for row in rows]
+    # Use Paragraphs for every cell so ReportLab wraps long text automatically
+    data = [head] + [
+        [Paragraph(str(c) if c is not None else "—",
+                   ParagraphStyle("tc", fontName="Helvetica", fontSize=8,
+                                  textColor=DARK, leading=11, wordWrap="CJK"))
+         for c in row]
+        for row in rows
+    ]
     cw = cw or [7.5*inch/len(headers)]*len(headers)
     t = Table(data, colWidths=cw, repeatRows=1)
     ts = [
         ("BACKGROUND",(0,0),(-1,0), DARK),
         ("FONTSIZE",  (0,0),(-1,-1), 8),
-        ("TOPPADDING",(0,0),(-1,-1), 5), ("BOTTOMPADDING",(0,0),(-1,-1), 5),
+        ("TOPPADDING",(0,0),(-1,-1), 5), ("BOTTOMPADDING",(0,0),(-1,-1), 6),
         ("LEFTPADDING",(0,0),(-1,-1), 6), ("RIGHTPADDING",(0,0),(-1,-1), 6),
         ("GRID",(0,0),(-1,-1), 0.3, BORDER),
         ("VALIGN",(0,0),(-1,-1), "TOP"),
@@ -423,22 +437,34 @@ def build_pdf(d: dict, filename: str) -> bytes:
 
     addr = f"{pd.get('address','')}, {pd.get('city','')}, {pd.get('state','')} {pd.get('zip','')}".strip(", ")
 
-    def dark_row(content, bg=DARK, top=8, bot=8, left=32):
+    def dark_row(content, bg=DARK, top=8, bot=8, left=28):
         t = Table([[content]], colWidths=[7.5*inch])
-        t.setStyle(TableStyle([("BACKGROUND",(0,0),(-1,-1),bg),
-            ("TOPPADDING",(0,0),(-1,-1),top), ("BOTTOMPADDING",(0,0),(-1,-1),bot),
-            ("LEFTPADDING",(0,0),(-1,-1),left)]))
+        t.setStyle(TableStyle([
+            ("BACKGROUND",(0,0),(-1,-1), bg),
+            ("TOPPADDING",(0,0),(-1,-1), top),
+            ("BOTTOMPADDING",(0,0),(-1,-1), bot),
+            ("LEFTPADDING",(0,0),(-1,-1), left),
+            ("RIGHTPADDING",(0,0),(-1,-1), left),
+        ]))
         return t
 
-    # Cover
-    story.append(dark_row(_p("MULTIFAMILY UNDERWRITING REPORT", fontname="Helvetica", size=9, color=GOLD), top=40, bot=6))
-    story.append(dark_row(_p(prop, fontname="Helvetica-Bold", size=26, color=colors.white), top=4, bot=8))
-    meta = f"Units: {_v(pd.get('units'),'n')}  ·  Year Built: {_v(pd.get('year_built'))}  ·  Occupancy: {_v(pd.get('occupancy_pct'),'%')}  ·  Broker: {broker_d.get('name','N/A')}"
-    story.append(dark_row(_p(meta, size=10, color=GOLD_L), bg=DARK2, top=10, bot=8))
-    story.append(dark_row(_p(addr, size=11, color=MID), bg=DARK2, top=4, bot=24))
-    story.append(Spacer(1,14))
-    story.append(_p(f"Report Generated: {date}", color=MID, size=9))
-    story.append(_p(f"Source: {filename}", color=MID, size=9))
+    # Cover — wrapped in KeepTogether so it doesn't split across pages
+    from reportlab.platypus import KeepTogether
+    cover_blocks = [
+        dark_row(_p("MULTIFAMILY UNDERWRITING REPORT",
+                    fontname="Helvetica", size=9, color=GOLD), top=36, bot=6),
+        dark_row(_p(prop, fontname="Helvetica-Bold", size=24,
+                    color=colors.white, leading=30), top=4, bot=10),
+        dark_row(_p(
+            f"Units: {_v(pd.get('units'),'n')}  ·  Year Built: {_v(pd.get('year_built'))}"
+            f"  ·  Occupancy: {_v(pd.get('occupancy_pct'),'%')}  ·  Broker: {broker_d.get('name','N/A')}",
+            size=10, color=GOLD_L, leading=15), bg=DARK2, top=10, bot=8),
+        dark_row(_p(addr, size=10, color=MID, leading=14), bg=DARK2, top=4, bot=20),
+        Spacer(1, 12),
+        _p(f"Report Generated: {date}", color=MID, size=9),
+        _p(f"Source: {filename}", color=MID, size=9),
+    ]
+    story.append(KeepTogether(cover_blocks))
     story.append(PageBreak())
 
     # 1 — Basic Details
@@ -658,53 +684,102 @@ def build_pdf(d: dict, filename: str) -> bytes:
                 v = vals.get(p)
                 pct = (item.get("pct") or item.get("per_unit") or {}).get(p,"")
                 cell = _v(v,"$") if v is not None else "—"
-                if pct: cell += f" ({pct})"
+                if pct: cell += f"\n({pct})"
                 row.append(cell)
-            note = item.get("note") or ""
-            row.append(note[:180] + ("…" if len(note)>180 else ""))
+            # Full note text — no truncation; cell wraps automatically
+            row.append(item.get("note") or "")
             return row
 
-        all_rows = [["Line Item"]+p4+["Underwriting Note"]]
-        smap = []
+        note_style = ParagraphStyle("fn", fontName="Helvetica", fontSize=7,
+                                    textColor=MID, leading=10, wordWrap="CJK")
+        item_style = ParagraphStyle("fi", fontName="Helvetica", fontSize=7.5,
+                                    textColor=DARK, leading=11, wordWrap="CJK")
+        num_style  = ParagraphStyle("fnum", fontName="Helvetica", fontSize=7.5,
+                                    textColor=DARK, leading=11, alignment=2)  # right-align numbers
 
-        all_rows.append(["INCOME"]+[""]*len(p4)+[""]); smap.append((len(all_rows)-1,"sec"))
+        def para_row(row_data, is_tot=False, is_sub=False, is_sec=False):
+            result = []
+            for idx, cell in enumerate(row_data):
+                txt = str(cell) if cell is not None else "—"
+                if is_tot:
+                    s = ParagraphStyle("x", fontName="Helvetica-Bold", fontSize=7.5,
+                                       textColor=GOLD_L, leading=11,
+                                       alignment=2 if idx > 0 and idx < len(row_data)-1 else 0)
+                elif is_sub:
+                    s = ParagraphStyle("x", fontName="Helvetica-Bold", fontSize=7.5,
+                                       textColor=DARK, leading=11,
+                                       alignment=2 if idx > 0 and idx < len(row_data)-1 else 0)
+                elif is_sec:
+                    s = ParagraphStyle("x", fontName="Helvetica-Bold", fontSize=8,
+                                       textColor=WARN, leading=12)
+                elif idx == 0:
+                    s = item_style
+                elif idx == len(row_data)-1:
+                    s = note_style
+                else:
+                    s = ParagraphStyle("x", fontName="Helvetica", fontSize=7.5,
+                                       textColor=DARK, leading=11, alignment=2)
+                result.append(Paragraph(txt, s))
+            return result
+
+        # Build header row
+        hdr_s = ParagraphStyle("fh", fontName="Helvetica-Bold", fontSize=7.5,
+                               textColor=GOLD_L, leading=11)
+        p_all_rows = [[Paragraph(h, hdr_s) for h in ["Line Item"]+p4+["Underwriting Note"]]]
+        p_smap = []
+
+        sec_row = para_row(["INCOME"]+[""]*len(p4)+[""], is_sec=True)
+        p_all_rows.append(sec_row); p_smap.append((len(p_all_rows)-1,"sec"))
+
         for item in inc_lines:
-            all_rows.append(frow(item))
-            if item.get("is_total"): smap.append((len(all_rows)-1,"tot"))
-            elif item.get("is_subtotal"): smap.append((len(all_rows)-1,"sub"))
+            is_t = item.get("is_total",False)
+            is_s = item.get("is_subtotal",False)
+            p_all_rows.append(para_row(frow(item), is_tot=is_t, is_sub=is_s))
+            if is_t:   p_smap.append((len(p_all_rows)-1,"tot"))
+            elif is_s: p_smap.append((len(p_all_rows)-1,"sub"))
 
-        all_rows.append(["EXPENSES"]+[""]*len(p4)+[""]); smap.append((len(all_rows)-1,"sec"))
+        sec_row = para_row(["EXPENSES"]+[""]*len(p4)+[""], is_sec=True)
+        p_all_rows.append(sec_row); p_smap.append((len(p_all_rows)-1,"sec"))
+
         for item in exp_lines:
-            all_rows.append(frow(item,"values"))
-            if item.get("is_total"): smap.append((len(all_rows)-1,"tot"))
-            elif item.get("is_subtotal"): smap.append((len(all_rows)-1,"sub"))
+            is_t = item.get("is_total",False)
+            is_s = item.get("is_subtotal",False)
+            p_all_rows.append(para_row(frow(item,"values"), is_tot=is_t, is_sub=is_s))
+            if is_t:   p_smap.append((len(p_all_rows)-1,"tot"))
+            elif is_s: p_smap.append((len(p_all_rows)-1,"sub"))
 
         noi = fin.get("noi") or {}
-        all_rows.append(["NET OPERATING INCOME"]+[_v(noi.get(p),"$") for p in p4]+["Key metric"])
-        smap.append((len(all_rows)-1,"tot"))
+        p_all_rows.append(para_row(["NET OPERATING INCOME"]+[_v(noi.get(p),"$") for p in p4]+["Key bottom-line metric"], is_tot=True))
+        p_smap.append((len(p_all_rows)-1,"tot"))
 
         capex = fin.get("capex") or {}
-        all_rows.append(["  Capital Reserves"]+[_v(capex.get(p),"$") for p in p4]+["Market std $225–$300/unit"])
+        p_all_rows.append(para_row(["  Capital Reserves"]+[_v(capex.get(p),"$") for p in p4]+["Market standard $225–$300/unit/yr"]))
 
         cffo = fin.get("cffo") or {}
-        all_rows.append(["CASH FLOW FROM OPERATIONS"]+[_v(cffo.get(p),"$") for p in p4]+["NOI minus capex"])
-        smap.append((len(all_rows)-1,"tot"))
+        p_all_rows.append(para_row(["CASH FLOW FROM OPERATIONS"]+[_v(cffo.get(p),"$") for p in p4]+["NOI minus capex reserves"], is_tot=True))
+        p_smap.append((len(p_all_rows)-1,"tot"))
 
-        t = Table(all_rows, colWidths=cw_fin, repeatRows=1)
+        # Adjust column widths: line item 2.0", periods 0.8" each, note gets remainder
+        note_w = 7.5*inch - 2.0*inch - len(p4)*0.8*inch
+        cw_fin = [2.0*inch] + [0.8*inch]*len(p4) + [note_w]
+
+        t = Table(p_all_rows, colWidths=cw_fin, repeatRows=1)
         ts = [
-            ("BACKGROUND",(0,0),(-1,0),DARK), ("TEXTCOLOR",(0,0),(-1,0),GOLD_L),
-            ("FONTNAME",(0,0),(-1,0),"Helvetica-Bold"),
-            ("FONTSIZE",(0,0),(-1,-1),7.5),
-            ("TOPPADDING",(0,0),(-1,-1),4), ("BOTTOMPADDING",(0,0),(-1,-1),4),
-            ("LEFTPADDING",(0,0),(-1,-1),5), ("RIGHTPADDING",(0,0),(-1,-1),5),
-            ("GRID",(0,0),(-1,-1),0.3,BORDER),
-            ("VALIGN",(0,0),(-1,-1),"TOP"),
-            ("ROWBACKGROUNDS",(0,1),(-1,-1),[colors.white,ALT]),
+            ("BACKGROUND",(0,0),(-1,0), DARK),
+            ("FONTSIZE",  (0,0),(-1,-1), 7.5),
+            ("TOPPADDING",(0,0),(-1,-1), 4), ("BOTTOMPADDING",(0,0),(-1,-1), 5),
+            ("LEFTPADDING",(0,0),(-1,-1), 5), ("RIGHTPADDING",(0,0),(-1,-1), 5),
+            ("GRID",(0,0),(-1,-1), 0.3, BORDER),
+            ("VALIGN",(0,0),(-1,-1), "TOP"),
+            ("ROWBACKGROUNDS",(0,1),(-1,-1), [colors.white, ALT]),
         ]
-        for ridx, stype in smap:
-            if stype=="tot":   ts += [("BACKGROUND",(0,ridx),(-1,ridx),DARK2),("TEXTCOLOR",(0,ridx),(-1,ridx),GOLD_L),("FONTNAME",(0,ridx),(-1,ridx),"Helvetica-Bold")]
-            elif stype=="sub": ts += [("BACKGROUND",(0,ridx),(-1,ridx),GOLD_P),("FONTNAME",(0,ridx),(-1,ridx),"Helvetica-Bold")]
-            elif stype=="sec": ts += [("BACKGROUND",(0,ridx),(-1,ridx),GOLD_P),("FONTNAME",(0,ridx),(-1,ridx),"Helvetica-Bold"),("TEXTCOLOR",(0,ridx),(-1,ridx),WARN)]
+        for ridx, stype in p_smap:
+            if stype=="tot":
+                ts += [("BACKGROUND",(0,ridx),(-1,ridx),DARK2)]
+            elif stype=="sub":
+                ts += [("BACKGROUND",(0,ridx),(-1,ridx),GOLD_P)]
+            elif stype=="sec":
+                ts += [("BACKGROUND",(0,ridx),(-1,ridx),GOLD_P)]
         t.setStyle(TableStyle(ts))
         story.append(t)
     else:
@@ -736,22 +811,37 @@ def build_pdf(d: dict, filename: str) -> bytes:
             "Verify":      (PURPLE_B, PURPLE),
             "Info":        (BLUE_B,   BLUE),
         }
-        fdata = [["Category","Title","Detail"]]
+        wrap_detail = ParagraphStyle("fd", fontName="Helvetica", fontSize=8,
+                                     textColor=DARK, leading=12, wordWrap="CJK")
+        wrap_title  = ParagraphStyle("ft", fontName="Helvetica-Bold", fontSize=8,
+                                     textColor=DARK, leading=12, wordWrap="CJK")
+        fdata = [[
+            Paragraph("Category", ParagraphStyle("fh", fontName="Helvetica-Bold", fontSize=8, textColor=GOLD_L)),
+            Paragraph("Title",    ParagraphStyle("fh", fontName="Helvetica-Bold", fontSize=8, textColor=GOLD_L)),
+            Paragraph("Detail",   ParagraphStyle("fh", fontName="Helvetica-Bold", fontSize=8, textColor=GOLD_L)),
+        ]]
         fstyle = [
-            ("BACKGROUND",(0,0),(-1,0),DARK),("TEXTCOLOR",(0,0),(-1,0),GOLD_L),
-            ("FONTNAME",(0,0),(-1,0),"Helvetica-Bold"),
-            ("FONTSIZE",(0,0),(-1,-1),8),
-            ("TOPPADDING",(0,0),(-1,-1),5),("BOTTOMPADDING",(0,0),(-1,-1),5),
-            ("LEFTPADDING",(0,0),(-1,-1),6),("RIGHTPADDING",(0,0),(-1,-1),6),
-            ("GRID",(0,0),(-1,-1),0.3,BORDER),("VALIGN",(0,0),(-1,-1),"TOP"),
+            ("BACKGROUND",(0,0),(-1,0), DARK),
+            ("FONTSIZE",  (0,0),(-1,-1), 8),
+            ("TOPPADDING",(0,0),(-1,-1), 6), ("BOTTOMPADDING",(0,0),(-1,-1), 6),
+            ("LEFTPADDING",(0,0),(-1,-1), 8), ("RIGHTPADDING",(0,0),(-1,-1), 8),
+            ("GRID",(0,0),(-1,-1), 0.3, BORDER),
+            ("VALIGN",(0,0),(-1,-1), "TOP"),
+            ("ROWBACKGROUNDS",(0,1),(-1,-1), [colors.white, ALT]),
         ]
         for i, f in enumerate(flags, 1):
             cat = f.get("category","Info")
             bg, tc = cat_map.get(cat, (BLUE_B, BLUE))
-            fdata.append([cat, f.get("title",""), f.get("detail","")])
-            fstyle += [("BACKGROUND",(0,i),(0,i),bg),("TEXTCOLOR",(0,i),(0,i),tc),
-                       ("FONTNAME",(0,i),(0,i),"Helvetica-Bold")]
-        ft = Table(fdata, colWidths=[1.0*inch,1.8*inch,4.7*inch])
+            cat_style = ParagraphStyle("fc", fontName="Helvetica-Bold", fontSize=8,
+                                       textColor=tc, leading=12)
+            fdata.append([
+                Paragraph(cat, cat_style),
+                Paragraph(f.get("title",""), wrap_title),
+                Paragraph(f.get("detail",""), wrap_detail),   # full text, no truncation
+            ])
+            fstyle += [("BACKGROUND",(0,i),(0,i), bg)]
+        # Column widths: Category=0.9", Title=1.6", Detail=5.0" — detail gets most space
+        ft = Table(fdata, colWidths=[0.9*inch, 1.6*inch, 5.0*inch])
         ft.setStyle(TableStyle(fstyle))
         story.append(ft)
 
