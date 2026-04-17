@@ -176,6 +176,25 @@ SCHEMA:
      "year_built": null, "units": null, "price": null, "ppu": null,
      "ppsf": null, "cap_rate": null, "occupancy": null, "notes": null}
   ],
+  "loan": {
+    "loan_type": null,
+    "lender": null,
+    "loan_amount": null,
+    "loan_to_value": null,
+    "interest_rate": null,
+    "rate_type": null,
+    "amortization_years": null,
+    "loan_term_years": null,
+    "maturity_date": null,
+    "origination_date": null,
+    "monthly_payment": null,
+    "annual_debt_service": null,
+    "dscr": null,
+    "prepayment_penalty": null,
+    "assumable": null,
+    "recourse": null,
+    "notes": null
+  },
   "market": {
     "submarket": null, "sub_occupancy": null, "sub_rent": null,
     "sub_growth": null, "metro_inventory": null, "metro_occupancy": null,
@@ -425,6 +444,7 @@ def build_pdf(d: dict, filename: str) -> bytes:
     fin = d.get("financials") or {}
     scomps = d.get("sale_comps") or []
     flags = d.get("flags") or []
+    loan  = d.get("loan") or {}
     mkt = d.get("market") or {}
     pd = d.get("property") or {}
 
@@ -801,7 +821,33 @@ def build_pdf(d: dict, filename: str) -> bytes:
     else:
         story.append(_p("⚠ Sale comps not in OM. Source from CoStar, RCA, or listing broker.", color=WARN))
 
-    # 10 — Flags
+    # 10 — Loan Information
+    story.append(PageBreak())
+    _hdr(story, "Loan Information", "10")
+    if any(v for v in loan.values() if v):
+        story.append(_kv([
+            ("Loan Type",            loan.get("loan_type")),
+            ("Lender",               loan.get("lender")),
+            ("Loan Amount",          _v(loan.get("loan_amount"),"$")),
+            ("Loan-to-Value (LTV)",  loan.get("loan_to_value")),
+            ("Interest Rate",        loan.get("interest_rate")),
+            ("Rate Type",            loan.get("rate_type")),
+            ("Amortization",         _v(loan.get("amortization_years"), suffix=" years")),
+            ("Loan Term",            _v(loan.get("loan_term_years"), suffix=" years")),
+            ("Origination Date",     loan.get("origination_date")),
+            ("Maturity Date",        loan.get("maturity_date")),
+            ("Monthly Payment",      _v(loan.get("monthly_payment"),"$")),
+            ("Annual Debt Service",  _v(loan.get("annual_debt_service"),"$")),
+            ("DSCR",                 loan.get("dscr")),
+            ("Prepayment Penalty",   loan.get("prepayment_penalty")),
+            ("Assumable",            loan.get("assumable")),
+            ("Recourse",             loan.get("recourse")),
+            ("Notes",                loan.get("notes")),
+        ]))
+    else:
+        story.append(_p("No loan information disclosed in the OM.", color=MID))
+
+    # 11 — Flags
     story.append(PageBreak())
     _hdr(story, "Underwriting Flags & Notes", "10")
     if flags:
