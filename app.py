@@ -198,39 +198,90 @@ RULES:
 def analyze_om(pdf_text: str, api_key: str, progress_cb=None) -> dict:
     client = anthropic.Anthropic(api_key=api_key)
 
-    # Chunk large documents
+      # Chunk large documents — keep at 140K to maximise context sent to Claude
     MAX = 140_000
     text = pdf_text[:MAX]
     if len(pdf_text) > MAX and progress_cb:
         progress_cb("Large OM detected — using first 140K characters (covers most OMs fully)")
-
+ 
     if progress_cb:
         progress_cb("Sending to Claude AI for analysis...")
-
+ 
     resp = client.messages.create(
         model="claude-opus-4-5",
-        max_tokens=8000,
+        max_tokens=16000,          # raised from 8000 — gives Claude enough room to finish the JSON
         system=SYSTEM,
         messages=[{"role": "user", "content": f"Analyze this OM:\n\n{text}"}]
     )
-
+ 
     raw = resp.content[0].text.strip()
-    # Strip any accidental fences
+    # Strip any accidental markdown fences
     raw = re.sub(r"^```[a-z]*\n?", "", raw).rstrip("`").strip()
-
+ 
     if progress_cb:
         progress_cb("Parsing extracted data...")
-
+ 
+    # Attempt 1 — clean parse
     try:
         return json.loads(raw)
     except json.JSONDecodeError:
-        # Try to recover partial JSON
+        pass
+ 
+    # Attempt 2 — extract JSON object if there is leading/trailing noise
+    try:
         m = re.search(r"\{.*\}", raw, re.DOTALL)
         if m:
             return json.loads(m.group())
-        raise ValueError("AI returned malformed JSON. Please retry.")
-
-
+    except json.JSONDecodeError:
+        pass
+ 
+    # Attempt 3 — response was still truncated; close open structures and retry
+    try:
+        fixed = _fix_truncated_json(raw)
+        return json.loads(fixed)
+    except Exception:
+        raise ValueError("Could not parse AI response. Please try again — this occasionally happens with very large OMs.")
+ 
+ 
+def _fix_truncated_json(raw: str) -> str:
+    """Close any open strings, arrays and objects left by a truncated JSON response."""
+    # First pass — close any open string
+    in_string = False
+    escape_next = False
+    for ch in raw:
+        if escape_next:
+            escape_next = False
+            continue
+        if ch == "\\":
+            escape_next = True
+            continue
+        if ch == '"':
+            in_string = not in_string
+    if in_string:
+        raw += '"'
+ 
+    # Second pass — close unmatched brackets / braces
+    opens = []
+    in_str = False
+    esc = False
+    for ch in raw:
+        if esc:
+            esc = False
+            continue
+        if ch == "\\":
+            esc = True
+            continue
+        if ch == '"':
+            in_str = not in_str
+            continue
+        if not in_str:
+            if ch in "{[":
+                opens.append("}" if ch == "{" else "]")
+            elif ch in "}]" and opens:
+                opens.pop()
+ 
+    raw += "".join(reversed(opens))
+    return raw
 # ══════════════════════════════════════════════════════════════════════════════
 # SECTION 3 — PDF REPORT GENERATOR
 # ══════════════════════════════════════════════════════════════════════════════
