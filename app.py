@@ -724,7 +724,10 @@ def build_pdf(d: dict, filename: str) -> bytes:
         ("Developer", pd.get("developer")),
         ("Asset Class", pd.get("asset_class")),
         ("Broker", broker_d.get("name")),
-        ("Listing Agents", ", ".join(broker_d.get("agents") or []) or "N/A"),
+        ("Listing Agents", ", ".join(
+            a.get("name", str(a)) if isinstance(a, dict) else str(a)
+            for a in (broker_d.get("agents") or [])
+        ) or "N/A"),
     ]))
 
     # 2 — Financing & Debt Terms
