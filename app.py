@@ -1,15 +1,14 @@
 import os, json, re, tempfile, io
+from datetime import datetime
 import streamlit as st
 import anthropic
 import pdfplumber
-from reportlab.lib.pagesizes import letter
-from reportlab.lib import colors
-from reportlab.lib.units import inch
-from reportlab.lib.styles import ParagraphStyle
-from reportlab.platypus import (
-    SimpleDocTemplate, Paragraph, Spacer, Table,
-    TableStyle, HRFlowable, PageBreak
+from openpyxl import Workbook
+from openpyxl.styles import (
+    Font, PatternFill, Alignment, Border, Side, GradientFill
 )
+from openpyxl.utils import get_column_letter
+from openpyxl.styles.numbers import FORMAT_NUMBER_COMMA_SEPARATED1
 
 # ── Page setup ────────────────────────────────────────────────────────────────
 st.set_page_config(
@@ -156,7 +155,19 @@ SCHEMA:
        "lighting": null, "sinks": null, "premium": null}
     ],
     "exterior_opportunity": null,
-    "additional_income": [{"name": null, "current": null, "proforma": null, "notes": null}],
+    "additional_income": [
+      {
+        "name": null,
+        "category": null,
+        "fee_per_unit_per_month": null,
+        "occupancy_assumption": null,
+        "monthly_income": null,
+        "current_annual": null,
+        "proforma_annual": null,
+        "calculation_detail": null,
+        "notes": null
+      }
+    ],
     "amenities": [],
     "unit_features": [],
     "highlights": []
@@ -378,13 +389,19 @@ CRITICAL EXTRACTION RULES — read every page carefully:
    - abatement_annual_savings = total_tax amount
    - ami_pct (80%), max_allowable_rent, avg_inplace_rent, rent_headroom, units_compliant, pct_compliant
 
-6. OTHER INCOME: Extract ALL income line items individually from the OM:
-   - Water/sewer submetering recapture ($112,594 proforma)
-   - Trash fee ($25/unit/mo = $41,040/yr at 95%)
-   - Pest control ($5/unit/mo = $8,208/yr at 95%)
-   - Internet ($45/unit/mo at 95% = $73,872/yr)
-   - Storage (55 units × $10/mo at 95% = $5,940/yr)
-   - Parking/garages (14 × $100/mo + 16 × $25/mo at 95% = $20,520/yr)
+6. OTHER INCOME: Extract EVERY other income line item from the OM into additional_income array.
+   This includes but is not limited to:
+   - Resident fees: admin fee, application fee, pet rent, pet fee (one-time), NSF fee,
+     late fee, early termination fee, transfer fee, lease violation fee
+   - Utility fees: water/sewer reimbursement, trash fee, valet trash, common area electric fee
+   - Amenity fees: community amenity fee, package locker fee, reserved parking fee,
+     storage fee, elevator building premium, garage fee
+   - Service fees: pest control fee, internet/cable/bulk internet fee
+   - Other: miscellaneous income, laundry income, renter's insurance reimbursement
+   For each item extract: name, category (Resident Fee / Utility / Amenity / Service / Other),
+   fee_per_unit_per_month, occupancy_assumption (e.g. "95%"), monthly_income,
+   current_annual, proforma_annual, and calculation_detail (full description of how calculated).
+   Do NOT skip any line item — extract every single one mentioned anywhere in the OM.
 
 7. FLAGS: Generate 6-10 flags. category must be one of: Warning / Opportunity / Verify / Info
    Include flags for: occupancy decline, HOA pool risk, insurance inconsistency, tax abatement opportunity,
@@ -517,27 +534,24 @@ def _fix_truncated_json(raw: str) -> str:
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# SECTION 3 — PDF REPORT GENERATOR
+# SECTION 3 — EXCEL REPORT GENERATOR
 # ══════════════════════════════════════════════════════════════════════════════
 
-DARK   = colors.HexColor("#1A1A18")
-DARK2  = colors.HexColor("#252522")
-GOLD   = colors.HexColor("#B8965A")
-GOLD_L = colors.HexColor("#D4B07A")
-GOLD_P = colors.HexColor("#F5EDD8")
-MID    = colors.HexColor("#777770")
-ALT    = colors.HexColor("#F5F4EF")
-BORDER = colors.HexColor("#E0DED5")
-GREEN  = colors.HexColor("#1E7A4A")
-GREEN_B= colors.HexColor("#EAF5EE")
-RED    = colors.HexColor("#C0392B")
-RED_B  = colors.HexColor("#FAEAEA")
-BLUE   = colors.HexColor("#1B4F8A")
-BLUE_B = colors.HexColor("#EAF0FA")
-WARN   = colors.HexColor("#8A5A1B")
-WARN_B = colors.HexColor("#FFF8EC")
-PURPLE_B=colors.HexColor("#F5F0FF")
-PURPLE = colors.HexColor("#6A3ABA")
+# ── Colour palette (hex strings for openpyxl, no leading #) ──────────────────
+C_DARK   = "1A1A18"
+C_DARK2  = "252522"
+C_GOLD   = "B8965A"
+C_GOLD_L = "D4B07A"
+C_GOLD_P = "F5EDD8"
+C_MID    = "777770"
+C_ALT    = "F5F4EF"
+C_WHITE  = "FFFFFF"
+C_GREEN  = "EAF5EE"
+C_RED    = "FAEAEA"
+C_BLUE   = "EAF0FA"
+C_PURPLE = "F5F0FF"
+C_WARN   = "FFF8EC"
+
 
 
 def _v(val, fmt=None, suffix="", default="N/A"):
@@ -555,104 +569,131 @@ def _v(val, fmt=None, suffix="", default="N/A"):
     return f"{val}{suffix}"
 
 
-def _st(fontname="Helvetica", size=9, color=DARK, leading=13, space_before=0, space_after=2, align=0):
-    return ParagraphStyle("x", fontName=fontname, fontSize=size, textColor=color,
-                          leading=leading, spaceBefore=space_before, spaceAfter=space_after, alignment=align)
+# ── openpyxl style helpers ────────────────────────────────────────────────────
+
+def _fill(hex_color):
+    return PatternFill("solid", fgColor=hex_color)
+
+def _font(bold=False, color=C_DARK, size=10, italic=False):
+    return Font(name="Arial", bold=bold, color=color, size=size, italic=italic)
+
+def _align(h="left", v="top", wrap=True):
+    return Alignment(horizontal=h, vertical=v, wrap_text=wrap)
+
+def _border_thin():
+    s = Side(style="thin", color="E0DED5")
+    return Border(left=s, right=s, top=s, bottom=s)
+
+def _border_bottom():
+    s = Side(style="medium", color=C_GOLD)
+    return Border(bottom=s)
 
 
-def _p(text, **kw):
-    return Paragraph(str(text) if text else "N/A", _st(**kw))
+class XLWriter:
+    """Thin wrapper around an openpyxl worksheet for sequential row writing."""
+
+    def __init__(self, ws):
+        self.ws = ws
+        self.row = 1
+        self.ws.sheet_view.showGridLines = False
+
+    def _set(self, cell, value, bold=False, bg=None, fg=C_DARK, size=10,
+             align_h="left", wrap=True, italic=False, border=True, num_fmt=None):
+        c = self.ws[cell]
+        c.value = value
+        c.font = _font(bold=bold, color=fg, size=size, italic=italic)
+        c.alignment = _align(h=align_h, v="top", wrap=wrap)
+        if bg:
+            c.fill = _fill(bg)
+        if border:
+            c.border = _border_thin()
+        if num_fmt:
+            c.number_format = num_fmt
+
+    def section(self, title):
+        """Dark gold section header spanning cols A–H."""
+        self.row += 1
+        self.ws.merge_cells(f"A{self.row}:H{self.row}")
+        self._set(f"A{self.row}", title, bold=True, bg=C_DARK, fg=C_GOLD_L,
+                  size=11, border=False)
+        self.ws.row_dimensions[self.row].height = 22
+        self.row += 1
+
+    def subsection(self, title):
+        """Gold-tinted subsection label."""
+        self.ws.merge_cells(f"A{self.row}:H{self.row}")
+        self._set(f"A{self.row}", title, bold=True, bg=C_GOLD_P, fg=C_DARK,
+                  size=10, border=False)
+        self.ws.row_dimensions[self.row].height = 18
+        self.row += 1
+
+    def kv(self, label, value, alt=False):
+        """Key-value row: col A = label, col B–H = value."""
+        bg = C_ALT if alt else C_WHITE
+        self._set(f"A{self.row}", label, fg=C_MID, bg=bg, size=9)
+        self.ws.merge_cells(f"B{self.row}:H{self.row}")
+        self._set(f"B{self.row}", str(value) if value else "N/A",
+                  bg=bg, size=9, wrap=True)
+        self.ws.row_dimensions[self.row].height = 15
+        self.row += 1
+
+    def blank(self, n=1):
+        self.row += n
+
+    def table_header(self, headers, col_start=1):
+        """Write a dark header row for a data table."""
+        for i, h in enumerate(headers):
+            col = get_column_letter(col_start + i)
+            self._set(f"{col}{self.row}", h, bold=True, bg=C_DARK,
+                      fg=C_GOLD_L, size=9, align_h="center")
+        self.ws.row_dimensions[self.row].height = 16
+        self.row += 1
+
+    def table_row(self, values, col_start=1, alt=False):
+        """Write a data row for a table."""
+        bg = C_ALT if alt else C_WHITE
+        for i, v in enumerate(values):
+            col = get_column_letter(col_start + i)
+            self._set(f"{col}{self.row}", str(v) if v is not None else "—",
+                      bg=bg, size=9, wrap=True)
+        self.ws.row_dimensions[self.row].height = 15
+        self.row += 1
+
+    def side_by_side_headers(self, left_title, right_title):
+        """Two dark headers side by side (cols A–D left, F–I right)."""
+        self.ws.merge_cells(f"A{self.row}:D{self.row}")
+        self._set(f"A{self.row}", left_title, bold=True, bg=C_DARK,
+                  fg=C_GOLD_L, size=10, border=False)
+        self.ws.merge_cells(f"F{self.row}:I{self.row}")
+        self._set(f"F{self.row}", right_title, bold=True, bg=C_DARK2,
+                  fg=C_GOLD_L, size=10, border=False)
+        self.row += 1
+
+    def side_by_side_kv(self, left_label, left_val, right_label, right_val, alt=False):
+        bg = C_ALT if alt else C_WHITE
+        self._set(f"A{self.row}", left_label, fg=C_MID, bg=bg, size=9)
+        self.ws.merge_cells(f"B{self.row}:D{self.row}")
+        self._set(f"B{self.row}", str(left_val) if left_val else "N/A", bg=bg, size=9)
+        self._set(f"F{self.row}", right_label, fg=C_MID, bg=bg, size=9)
+        self.ws.merge_cells(f"G{self.row}:I{self.row}")
+        self._set(f"G{self.row}", str(right_val) if right_val else "N/A", bg=bg, size=9)
+        self.ws.row_dimensions[self.row].height = 15
+        self.row += 1
+
+    def set_col_widths(self, widths):
+        for col_letter, w in widths.items():
+            self.ws.column_dimensions[col_letter].width = w
 
 
-def _hdr(story, title, num):
-    story.append(Spacer(1, 8))
-    story.append(HRFlowable(width="100%", thickness=2, color=GOLD, spaceAfter=4))
-    t = Table([[f"{num}. {title}"]], colWidths=[7.5*inch])
-    t.setStyle(TableStyle([
-        ("BACKGROUND", (0,0),(-1,-1), colors.white),
-        ("TEXTCOLOR",  (0,0),(-1,-1), DARK),
-        ("FONTNAME",   (0,0),(-1,-1), "Helvetica-Bold"),
-        ("FONTSIZE",   (0,0),(-1,-1), 13),
-        ("TOPPADDING", (0,0),(-1,-1), 2),
-        ("BOTTOMPADDING",(0,0),(-1,-1), 4),
-    ]))
-    story.append(t)
-    story.append(Spacer(1, 4))
-
-
-def _kv(rows, cw=None):
-    cw = cw or [2.2*inch, 5.3*inch]
-    wrap_style = ParagraphStyle("kv", fontName="Helvetica", fontSize=9,
-                                textColor=DARK, leading=13, wordWrap="CJK")
-    key_style  = ParagraphStyle("kk", fontName="Helvetica", fontSize=8.5,
-                                textColor=MID, leading=13)
-    data = [[Paragraph(str(k), key_style),
-             Paragraph(str(v) if v else "N/A", wrap_style)] for k, v in rows]
-    t = Table(data, colWidths=cw)
-    t.setStyle(TableStyle([
-        ("ROWBACKGROUNDS", (0,0),(-1,-1), [colors.white, ALT]),
-        ("GRID",  (0,0),(-1,-1), 0.3, BORDER),
-        ("TOPPADDING",    (0,0),(-1,-1), 6),
-        ("BOTTOMPADDING", (0,0),(-1,-1), 6),
-        ("LEFTPADDING",   (0,0),(-1,-1), 8),
-        ("RIGHTPADDING",  (0,0),(-1,-1), 8),
-        ("VALIGN", (0,0),(-1,-1), "TOP"),
-    ]))
-    return t
-
-
-def _tbl(headers, rows, cw=None, hl_last=False):
-    head = [_p(h, fontname="Helvetica-Bold", size=8, color=GOLD_L) for h in headers]
-    # Use Paragraphs for every cell so ReportLab wraps long text automatically
-    data = [head] + [
-        [Paragraph(str(c) if c is not None else "—",
-                   ParagraphStyle("tc", fontName="Helvetica", fontSize=8,
-                                  textColor=DARK, leading=11, wordWrap="CJK"))
-         for c in row]
-        for row in rows
-    ]
-    cw = cw or [7.5*inch/len(headers)]*len(headers)
-    t = Table(data, colWidths=cw, repeatRows=1)
-    ts = [
-        ("BACKGROUND",(0,0),(-1,0), DARK),
-        ("FONTSIZE",  (0,0),(-1,-1), 8),
-        ("TOPPADDING",(0,0),(-1,-1), 5), ("BOTTOMPADDING",(0,0),(-1,-1), 6),
-        ("LEFTPADDING",(0,0),(-1,-1), 6), ("RIGHTPADDING",(0,0),(-1,-1), 6),
-        ("GRID",(0,0),(-1,-1), 0.3, BORDER),
-        ("VALIGN",(0,0),(-1,-1), "TOP"),
-        ("ROWBACKGROUNDS",(0,1),(-1,-1), [colors.white, ALT]),
-    ]
-    if hl_last and len(data) > 1:
-        ts += [("BACKGROUND",(0,-1),(-1,-1), DARK2),
-               ("TEXTCOLOR",(0,-1),(-1,-1), GOLD_L),
-               ("FONTNAME",(0,-1),(-1,-1), "Helvetica-Bold")]
-    t.setStyle(TableStyle(ts))
-    return t
-
-
-def _footer(prop, date):
-    def draw(canvas, doc):
-        canvas.saveState()
-        w, _ = letter
-        canvas.setStrokeColor(GOLD); canvas.setLineWidth(0.5)
-        canvas.line(0.75*inch, 0.65*inch, w-0.75*inch, 0.65*inch)
-        canvas.setFont("Helvetica", 7); canvas.setFillColor(MID)
-        canvas.drawString(0.75*inch, 0.5*inch, f"{prop} — Underwriting Report")
-        canvas.drawRightString(w-0.75*inch, 0.5*inch, f"Page {doc.page}  |  {date}")
-        canvas.restoreState()
-    return draw
-
-
-def build_pdf(d: dict, filename: str) -> bytes:
-    from datetime import datetime
+def build_excel(d: dict, filename: str) -> bytes:
     date = datetime.today().strftime("%B %d, %Y")
-    prop = (d.get("property") or {}).get("name") or "Property"
+    prop     = (d.get("property") or {}).get("name") or "Property"
     broker_d = d.get("broker") or {}
-    inv = d.get("investment") or {}
-    demo = d.get("demographics") or {}
-    umix = d.get("unit_mix") or []
-    utils = d.get("utilities") or []
-    site = d.get("site") or {}
+    inv      = d.get("investment") or {}
+    demo     = d.get("demographics") or {}
+    umix     = d.get("unit_mix") or []
+    utils_   = d.get("utilities") or []
+    site     = d.get("site") or {}
     rcomps   = d.get("rent_comps") or []
     rg       = d.get("rent_comps_garden") or []
     rth      = d.get("rent_comps_townhouse") or []
@@ -660,7 +701,7 @@ def build_pdf(d: dict, filename: str) -> bytes:
     scomps   = d.get("sale_comps") or []
     flags    = d.get("flags") or []
     mkt      = d.get("market") or {}
-    pd       = d.get("property") or {}
+    pd_      = d.get("property") or {}
     va       = d.get("value_add") or {}
     tax      = d.get("tax") or {}
     fin_info = d.get("financing") or {}
@@ -669,697 +710,562 @@ def build_pdf(d: dict, filename: str) -> bytes:
     mgmt     = d.get("management") or {}
     repl     = d.get("replacement_cost") or {}
 
-    buf = io.BytesIO()
-    doc = SimpleDocTemplate(buf, pagesize=letter,
-        leftMargin=0.75*inch, rightMargin=0.75*inch,
-        topMargin=0.75*inch, bottomMargin=0.9*inch,
-        title=f"{prop} — Underwriting Report")
-    story = []
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Underwriting Report"
+    xl = XLWriter(ws)
 
-    addr = f"{pd.get('address','')}, {pd.get('city','')}, {pd.get('state','')} {pd.get('zip','')}".strip(", ")
+    addr = f"{pd_.get('address','')}, {pd_.get('city','')}, {pd_.get('state','')} {pd_.get('zip','')}".strip(", ")
 
-    def dark_row(content, bg=DARK, top=8, bot=8, left=28):
-        t = Table([[content]], colWidths=[7.5*inch])
-        t.setStyle(TableStyle([
-            ("BACKGROUND",(0,0),(-1,-1), bg),
-            ("TOPPADDING",(0,0),(-1,-1), top),
-            ("BOTTOMPADDING",(0,0),(-1,-1), bot),
-            ("LEFTPADDING",(0,0),(-1,-1), left),
-            ("RIGHTPADDING",(0,0),(-1,-1), left),
-        ]))
-        return t
+    # Set column widths for single sheet (wide enough for all sections)
+    xl.set_col_widths({
+        "A": 30, "B": 18, "C": 14, "D": 14,
+        "E": 4,  "F": 30, "G": 18, "H": 14, "I": 14,
+        "J": 14, "K": 14, "L": 14, "M": 14,
+    })
 
-    # Cover — wrapped in KeepTogether so it doesn't split across pages
-    from reportlab.platypus import KeepTogether
-    cover_blocks = [
-        dark_row(_p("MULTIFAMILY UNDERWRITING REPORT",
-                    fontname="Helvetica", size=9, color=GOLD), top=36, bot=6),
-        dark_row(_p(prop, fontname="Helvetica-Bold", size=24,
-                    color=colors.white, leading=30), top=4, bot=10),
-        dark_row(_p(
-            f"Units: {_v(pd.get('units'),'n')}  ·  Year Built: {_v(pd.get('year_built'))}"
-            f"  ·  Occupancy: {_v(pd.get('occupancy_pct'),'%')}  ·  Broker: {broker_d.get('name','N/A')}",
-            size=10, color=GOLD_L, leading=15), bg=DARK2, top=10, bot=8),
-        dark_row(_p(addr, size=10, color=MID, leading=14), bg=DARK2, top=4, bot=20),
-        Spacer(1, 12),
-        _p(f"Report Generated: {date}", color=MID, size=9),
-        _p(f"Source: {filename}", color=MID, size=9),
-    ]
-    story.append(KeepTogether(cover_blocks))
-    story.append(PageBreak())
+    # ── Cover rows ────────────────────────────────────────────────────────────
+    ws.merge_cells("A1:M1")
+    xl._set("A1", "MULTIFAMILY UNDERWRITING REPORT",
+            bold=True, bg=C_DARK, fg=C_GOLD_L, size=12,
+            align_h="center", border=False)
+    ws.row_dimensions[1].height = 24
+    xl.row = 2
+    ws.merge_cells(f"A2:M2")
+    xl._set("A2", prop, bold=True, bg=C_DARK, fg=C_WHITE,
+            size=20, align_h="center", border=False)
+    ws.row_dimensions[2].height = 40
+    xl.row = 3
+    ws.merge_cells("A3:M3")
+    xl._set("A3",
+        f"Address: {addr}   ·   Broker: {broker_d.get('name','N/A')}   ·   "
+        f"Units: {_v(pd_.get('units'),'n')}   ·   Year Built: {_v(pd_.get('year_built'))}   ·   "
+        f"Report: {date}   ·   Source: {filename}",
+        bg=C_DARK2, fg=C_GOLD_L, size=9, align_h="center", border=False)
+    ws.row_dimensions[3].height = 18
+    xl.row = 4
 
-    # 1 — Basic Details
-    _hdr(story, "Basic Property Details", "1")
-    story.append(_kv([
-        ("Property Name", prop), ("Address", addr),
-        ("County", pd.get("county")), ("MSA", pd.get("msa")),
-        ("Total Units", _v(pd.get("units"),"n")),
-        ("Year Built", _v(pd.get("year_built"))),
-        ("Net Rentable Area", _v(pd.get("rentable_sf"),"n",suffix=" SF")),
-        ("Avg Unit Size", _v(pd.get("avg_unit_sf"),"n",suffix=" SF")),
-        ("Occupancy", f"{_v(pd.get('occupancy_pct'),'%')} as of {pd.get('occupancy_date','N/A')}"),
-        ("Buildings / Stories", f"{_v(pd.get('buildings'),'n')} bldgs / {_v(pd.get('floors'))} stories"),
-        ("Land Area", _v(pd.get("acres"),suffix=" acres")),
-        ("Density", _v(pd.get("density"),suffix=" units/acre")),
-        ("Developer", pd.get("developer")),
-        ("Asset Class", pd.get("asset_class")),
-        ("Broker", broker_d.get("name")),
-        ("Listing Agents", ", ".join(
-            a.get("name", str(a)) if isinstance(a, dict) else str(a)
-            for a in (broker_d.get("agents") or [])
-        ) or "N/A"),
-    ]))
+    # ── 1. Basic Property Details ─────────────────────────────────────────────
+    xl.section("1. BASIC PROPERTY DETAILS")
+    agents = ", ".join(
+        a.get("name", str(a)) if isinstance(a, dict) else str(a)
+        for a in (broker_d.get("agents") or [])
+    ) or "N/A"
+    for i, (k, v) in enumerate([
+        ("Property Name",      prop),
+        ("Address",            addr),
+        ("County",             pd_.get("county")),
+        ("MSA",                pd_.get("msa")),
+        ("Total Units",        _v(pd_.get("units"),"n")),
+        ("Year Built",         _v(pd_.get("year_built"))),
+        ("Net Rentable Area",  _v(pd_.get("rentable_sf"),"n",suffix=" SF")),
+        ("Avg Unit Size",      _v(pd_.get("avg_unit_sf"),"n",suffix=" SF")),
+        ("Occupancy",          f"{_v(pd_.get('occupancy_pct'),'%')} as of {pd_.get('occupancy_date','N/A')}"),
+        ("Buildings / Stories",f"{_v(pd_.get('buildings'),'n')} bldgs / {_v(pd_.get('floors'))} stories"),
+        ("Land Area",          _v(pd_.get("acres"),suffix=" acres")),
+        ("Density",            _v(pd_.get("density"),suffix=" units/acre")),
+        ("Developer",          pd_.get("developer")),
+        ("Asset Class",        pd_.get("asset_class")),
+        ("Broker",             broker_d.get("name")),
+        ("Listing Agents",     agents),
+    ]):
+        xl.kv(k, v, alt=bool(i % 2))
 
-    # 2 — Financing & Debt Terms
-    story.append(PageBreak())
-    _hdr(story, "Financing & Debt Terms", "2")
-
-    story.append(_kv([
+    # ── 2. Financing ──────────────────────────────────────────────────────────
+    xl.section("2. FINANCING & DEBT TERMS")
+    for i, (k, v) in enumerate([
         ("Offering Type",  fin_info.get("offering_type")),
         ("Debt Contact",   fin_info.get("debt_contact")),
         ("Notes",          fin_info.get("notes")),
-    ]))
-
-    story.append(Spacer(1, 10))
+    ]):
+        xl.kv(k, v, alt=bool(i % 2))
+    xl.blank()
 
     nf  = fin_info.get("new_financing") or {}
     asd = fin_info.get("assumable_debt") or {}
+    xl.side_by_side_headers("NEW FINANCING", "ASSUMABLE DEBT")
 
-    # Side-by-side two-column table for New Financing vs Assumable Debt
-    col_hdr_style = ParagraphStyle("fch", fontName="Helvetica-Bold", fontSize=9,
-                                   textColor=GOLD_L, leading=13)
-    key_style_fin = ParagraphStyle("fck", fontName="Helvetica", fontSize=8.5,
-                                   textColor=MID, leading=13)
-    val_style_fin = ParagraphStyle("fcv", fontName="Helvetica", fontSize=9,
-                                   textColor=DARK, leading=13, wordWrap="CJK")
-
-    def fin_cell(label, val):
-        return [Paragraph(label, key_style_fin), Paragraph(str(val) if val else "N/A", val_style_fin)]
-
-    new_rows = [
-        fin_cell("Loan Type",          nf.get("loan_type")),
-        fin_cell("Lender",             nf.get("lender")),
-        fin_cell("Loan Amount",        _v(nf.get("loan_amount"),"$")),
-        fin_cell("LTV",                f"{nf.get('loan_to_value') or 'N/A'}%"),
-        fin_cell("Interest Rate",      f"{nf.get('interest_rate') or 'N/A'}%"),
-        fin_cell("Rate Type",          nf.get("rate_type")),
-        fin_cell("Loan Term",          nf.get("loan_term_years")),
-        fin_cell("Amortization",       nf.get("amortization_years")),
-        fin_cell("Interest-Only",      nf.get("interest_only_period")),
-        fin_cell("DSCR",               nf.get("dscr")),
-        fin_cell("Recourse",           nf.get("recourse")),
-        fin_cell("Notes",              nf.get("notes")),
+    nf_rows  = [
+        ("Loan Type",      nf.get("loan_type")),
+        ("Lender",         nf.get("lender")),
+        ("Loan Amount",    _v(nf.get("loan_amount"),"$")),
+        ("LTV",            f"{nf.get('loan_to_value') or 'N/A'}%"),
+        ("Interest Rate",  f"{nf.get('interest_rate') or 'N/A'}%"),
+        ("Rate Type",      nf.get("rate_type")),
+        ("Loan Term",      nf.get("loan_term_years")),
+        ("Amortization",   nf.get("amortization_years")),
+        ("Interest-Only",  nf.get("interest_only_period")),
+        ("DSCR",           nf.get("dscr")),
+        ("Recourse",       nf.get("recourse")),
+        ("Notes",          nf.get("notes")),
     ]
     asd_rows = [
-        fin_cell("Loan Type",          asd.get("loan_type")),
-        fin_cell("Lender",             asd.get("lender")),
-        fin_cell("Loan Amount",        _v(asd.get("loan_amount"),"$")),
-        fin_cell("LTV",                f"{asd.get('loan_to_value') or 'N/A'}%"),
-        fin_cell("Interest Rate",      f"{asd.get('interest_rate') or 'N/A'}%"),
-        fin_cell("Rate Type",          asd.get("rate_type")),
-        fin_cell("Loan Term",          asd.get("loan_term_years")),
-        fin_cell("Amortization",       asd.get("amortization_years")),
-        fin_cell("Origination Date",   asd.get("origination_date")),
-        fin_cell("Maturity Date",      asd.get("maturity_date")),
-        fin_cell("Monthly Payment",    _v(asd.get("monthly_payment"),"$")),
-        fin_cell("Annual Debt Svc",    _v(asd.get("annual_debt_service"),"$")),
-        fin_cell("DSCR",               asd.get("dscr")),
-        fin_cell("Prepayment Penalty", asd.get("prepayment_penalty")),
-        fin_cell("Recourse",           asd.get("recourse")),
-        fin_cell("Notes",              asd.get("notes")),
+        ("Loan Type",          asd.get("loan_type")),
+        ("Lender",             asd.get("lender")),
+        ("Loan Amount",        _v(asd.get("loan_amount"),"$")),
+        ("LTV",                f"{asd.get('loan_to_value') or 'N/A'}%"),
+        ("Interest Rate",      f"{asd.get('interest_rate') or 'N/A'}%"),
+        ("Rate Type",          asd.get("rate_type")),
+        ("Loan Term",          asd.get("loan_term_years")),
+        ("Amortization",       asd.get("amortization_years")),
+        ("Origination Date",   asd.get("origination_date")),
+        ("Maturity Date",      asd.get("maturity_date")),
+        ("Monthly Payment",    _v(asd.get("monthly_payment"),"$")),
+        ("Annual Debt Svc",    _v(asd.get("annual_debt_service"),"$")),
+        ("DSCR",               asd.get("dscr")),
+        ("Prepayment Penalty", asd.get("prepayment_penalty")),
+        ("Recourse",           asd.get("recourse")),
+        ("Notes",              asd.get("notes")),
     ]
+    max_r = max(len(nf_rows), len(asd_rows))
+    nf_rows  += [("","")] * (max_r - len(nf_rows))
+    asd_rows += [("","")] * (max_r - len(asd_rows))
+    for i, ((lk, lv), (rk, rv)) in enumerate(zip(nf_rows, asd_rows)):
+        xl.side_by_side_kv(lk, lv, rk, rv, alt=bool(i % 2))
 
-    # Pad shorter column so rows align
-    spacer_cell = Paragraph(" ", val_style_fin)
-    while len(new_rows) < len(asd_rows):
-        new_rows.append([Paragraph(" ", key_style_fin), spacer_cell])
-    while len(asd_rows) < len(new_rows):
-        asd_rows.append([Paragraph(" ", key_style_fin), spacer_cell])
+    # ── 3. Investment Highlights ──────────────────────────────────────────────
+    xl.section("3. INVESTMENT HIGHLIGHTS & OPPORTUNITIES")
+    xl.subsection("Rent Overview")
+    for i, (k, v) in enumerate([
+        ("Current Market Rent",      f"{_v(inv.get('market_rent'),'$')} ({_v(inv.get('market_rent_psf'))} PSF)"),
+        ("Current Effective Rent",   f"{_v(inv.get('effective_rent'),'$')} ({_v(inv.get('effective_rent_psf'))} PSF)"),
+        ("Comp Set Effective Rent",  _v(inv.get("comp_effective_rent"),"$")),
+        ("Rent Gap / Unit",          _v(inv.get("rent_gap"),"$")),
+        ("Annual Upside (total)",    _v(inv.get("annual_upside"),"$")),
+        ("Below Replacement Cost",   inv.get("replacement_cost_note")),
+    ]):
+        xl.kv(k, v, alt=bool(i % 2))
 
-    # Build side-by-side table: [NF label | NF value | divider | ASD label | ASD value]
-    fin_hdr = [
-        Paragraph("NEW FINANCING", col_hdr_style),
-        Paragraph("", col_hdr_style),
-        Paragraph("", col_hdr_style),
-        Paragraph("ASSUMABLE DEBT", col_hdr_style),
-        Paragraph("", col_hdr_style),
-    ]
-    fin_data = [fin_hdr] + [
-        [nr[0], nr[1], Paragraph("", val_style_fin), ar[0], ar[1]]
-        for nr, ar in zip(new_rows, asd_rows)
-    ]
-    fin_tbl = Table(fin_data, colWidths=[1.3*inch, 2.1*inch, 0.2*inch, 1.3*inch, 2.1*inch], repeatRows=1)
-    fin_tbl.setStyle(TableStyle([
-        ("BACKGROUND",    (0,0), (1,0),  DARK),
-        ("BACKGROUND",    (3,0), (4,0),  DARK2),
-        ("BACKGROUND",    (2,0), (2,-1), colors.white),
-        ("ROWBACKGROUNDS",(0,1), (1,-1), [colors.white, ALT]),
-        ("ROWBACKGROUNDS",(3,1), (4,-1), [colors.white, ALT]),
-        ("GRID",          (0,0), (1,-1), 0.3, BORDER),
-        ("GRID",          (3,0), (4,-1), 0.3, BORDER),
-        ("LINEAFTER",     (2,0), (2,-1), 0,   colors.white),
-        ("TOPPADDING",    (0,0), (-1,-1), 5),
-        ("BOTTOMPADDING", (0,0), (-1,-1), 5),
-        ("LEFTPADDING",   (0,0), (-1,-1), 7),
-        ("RIGHTPADDING",  (0,0), (-1,-1), 7),
-        ("VALIGN",        (0,0), (-1,-1), "TOP"),
-    ]))
-    story.append(fin_tbl)
-
-    # 3 — Investment Highlights
-    story.append(PageBreak())
-    _hdr(story, "Investment Highlights & Opportunities", "3")
-
-    story.append(_p("Rent Overview", fontname="Helvetica-Bold", size=11, space_before=6, space_after=4))
-    story.append(_kv([
-        ("Current Market Rent", f"{_v(inv.get('market_rent'),'$')} ({_v(inv.get('market_rent_psf'))} PSF)"),
-        ("Current Effective Rent", f"{_v(inv.get('effective_rent'),'$')} ({_v(inv.get('effective_rent_psf'))} PSF)"),
-        ("Comp Set Effective Rent", _v(inv.get("comp_effective_rent"),"$")),
-        ("Rent Gap / Unit", _v(inv.get("rent_gap"),"$")),
-        ("Annual Upside (total)", _v(inv.get("annual_upside"),"$")),
-        ("Below Replacement Cost", inv.get("replacement_cost_note")),
-    ]))
-
-    story.append(_p("Renovation Tiers", fontname="Helvetica-Bold", size=11, space_before=10, space_after=4))
     tiers = inv.get("renovation_tiers") or []
     if tiers:
-        story.append(_tbl(
-            ["Tier","Units","Appliances","Cabinets","Countertops","Flooring","Premium vs Classic"],
-            [[t.get("name","—"), _v(t.get("units"),"n"),
-              t.get("appliances") or "—", t.get("cabinets") or "—",
-              t.get("countertops") or "—", t.get("flooring") or "—",
-              _v(t.get("premium"),"$") if t.get("premium") else "—"] for t in tiers],
-            cw=[1.0*inch,0.6*inch,1.3*inch,1.1*inch,1.2*inch,1.2*inch,1.1*inch]
-        ))
-        for t in tiers:
-            extras = [(k.title(), t.get(k)) for k in ("backsplash","faucets","lighting","sinks","description") if t.get(k)]
-            if extras:
-                story.append(_p(f"{t.get('name','Finish')} — additional specs", fontname="Helvetica-Bold", size=9.5, space_before=6))
-                story.append(_kv(extras, cw=[1.4*inch,6.1*inch]))
-    else:
-        story.append(_p("No renovation tiers in OM. Property may be new construction with single finish level.", color=WARN))
+        xl.blank()
+        xl.subsection("Renovation Tiers")
+        xl.table_header(["Tier","Units","Appliances","Cabinets","Countertops","Flooring","Premium"])
+        for i, t in enumerate(tiers):
+            xl.table_row([
+                t.get("name","—"), _v(t.get("units"),"n"),
+                t.get("appliances") or "—", t.get("cabinets") or "—",
+                t.get("countertops") or "—", t.get("flooring") or "—",
+                _v(t.get("premium"),"$") if t.get("premium") else "—"
+            ], alt=bool(i % 2))
 
-    story.append(_p("Exterior Renovation Opportunity", fontname="Helvetica-Bold", size=11, space_before=10, space_after=4))
-    story.append(_p(inv.get("exterior_opportunity") or "Not disclosed in OM.", color=MID if not inv.get("exterior_opportunity") else DARK))
+    light_items = inv.get("light_upgrade_items") or va.get("light_upgrade_items") or []
+    if light_items:
+        xl.blank()
+        xl.subsection("Light Interior Upgrade Items")
+        for i, item in enumerate(light_items):
+            xl.kv(f"  {i+1}.", item, alt=bool(i % 2))
 
-    story.append(_p("Additional Income Opportunities", fontname="Helvetica-Bold", size=11, space_before=10, space_after=4))
     add_inc = inv.get("additional_income") or []
     if add_inc:
-        story.append(_tbl(
-            ["Income Item","Current Annual","Pro Forma Annual","Notes"],
-            [[i.get("name","—"), _v(i.get("current"),"$"), _v(i.get("proforma"),"$"), i.get("notes") or "—"] for i in add_inc],
-            cw=[1.8*inch,1.2*inch,1.4*inch,3.1*inch]
-        ))
+        xl.blank()
+        xl.subsection("Additional Income Opportunities")
+        xl.table_header([
+            "Income Item", "Category", "Fee/Unit/Mo",
+            "Occupancy %", "Monthly Income",
+            "Current Annual", "Pro Forma Annual", "Calculation Detail"
+        ])
+        for i, inc in enumerate(add_inc):
+            xl.table_row([
+                inc.get("name") or "—",
+                inc.get("category") or "—",
+                _v(inc.get("fee_per_unit_per_month"), "$") if inc.get("fee_per_unit_per_month") else "—",
+                inc.get("occupancy_assumption") or "—",
+                _v(inc.get("monthly_income"), "$") if inc.get("monthly_income") else "—",
+                _v(inc.get("current_annual"), "$") if inc.get("current_annual") else "—",
+                _v(inc.get("proforma_annual"), "$") if inc.get("proforma_annual") else "—",
+                inc.get("calculation_detail") or inc.get("notes") or "—",
+            ], alt=bool(i % 2))
 
-    story.append(_p("Community Amenities", fontname="Helvetica-Bold", size=11, space_before=10, space_after=4))
     if inv.get("amenities"):
-        story.append(_p("  ·  ".join(inv["amenities"])))
-    story.append(_p("Unit Features", fontname="Helvetica-Bold", size=11, space_before=8, space_after=4))
+        xl.blank()
+        xl.subsection("Community Amenities")
+        xl.kv("Amenities", "  ·  ".join(inv["amenities"]))
     if inv.get("unit_features"):
-        story.append(_p("  ·  ".join(inv["unit_features"])))
+        xl.blank()
+        xl.subsection("Unit Features")
+        xl.kv("Features", "  ·  ".join(inv["unit_features"]))
     if inv.get("highlights"):
-        story.append(_p("Other Highlights", fontname="Helvetica-Bold", size=11, space_before=8, space_after=4))
-        for h in inv["highlights"]:
-            story.append(_p(f"• {h}"))
+        xl.blank()
+        xl.subsection("Other Highlights")
+        for i, h in enumerate(inv["highlights"]):
+            xl.kv(f"  {i+1}.", h, alt=bool(i % 2))
 
-    # 4 — Proposed Value-Add
-    story.append(PageBreak())
-    _hdr(story, "Proposed Value-Add by Floor Plan", "4")
+    # ── 4. Value-Add ──────────────────────────────────────────────────────────
+    xl.section("4. PROPOSED VALUE-ADD BY FLOOR PLAN")
     plans = va.get("by_floor_plan") or []
     if plans:
-        story.append(_tbl(
-            ["Unit Type","SF","Units","In-Place Rent","In-Place PSF","Rehab Cost/Unit","Premium/Unit","Post-Rehab Rent","Post-Rehab PSF"],
-            [[p.get("type","—"), _v(p.get("sf"),"n"), _v(p.get("units"),"n"),
-              _v(p.get("inplace_rent"),"$"), f"${p.get('inplace_psf') or 0:.2f}",
-              _v(p.get("rehab_cost"),"$"), _v(p.get("premium"),"$"),
-              _v(p.get("post_rehab_rent"),"$"), f"${p.get('post_rehab_psf') or 0:.2f}"] for p in plans],
-            cw=[1.4*inch,0.5*inch,0.45*inch,0.85*inch,0.7*inch,0.85*inch,0.75*inch,0.9*inch,0.75*inch]
-        ))
-    light_items = va.get("light_upgrade_items") or []
-    if light_items:
-        story.append(_p("Light Interior Upgrade Items", fontname="Helvetica-Bold", size=11, space_before=10, space_after=4))
-        for item in light_items:
-            story.append(_p(f"• {item}"))
-    story.append(_p("Capital Expenditures & ROI Summary", fontname="Helvetica-Bold", size=11, space_before=10, space_after=4))
-    story.append(_kv([
-        ("Total Renovation Cost",     _v(va.get("total_cost"),"$")),
+        xl.table_header(["Unit Type","SF","Units","In-Place Rent","In-Place PSF","Rehab Cost/Unit","Premium/Unit","Post-Rehab Rent","Post-Rehab PSF"])
+        for i, p in enumerate(plans):
+            xl.table_row([
+                p.get("type","—"), _v(p.get("sf"),"n"), _v(p.get("units"),"n"),
+                _v(p.get("inplace_rent"),"$"), f"${p.get('inplace_psf') or 0:.2f}",
+                _v(p.get("rehab_cost"),"$"), _v(p.get("premium"),"$"),
+                _v(p.get("post_rehab_rent"),"$"), f"${p.get('post_rehab_psf') or 0:.2f}"
+            ], alt=bool(i % 2))
+    xl.blank()
+    xl.subsection("CapEx & ROI Summary")
+    for i, (k, v) in enumerate([
+        ("Total Renovation Cost",      _v(va.get("total_cost"),"$")),
         ("Cost Per Unit (all-in)",     _v(va.get("cost_per_unit"),"$")),
         ("Exterior / Additional CapEx",_v(va.get("exterior_capex"),"$")),
-        ("Monthly Rent Premium (total)",_v(va.get("monthly_premium"),"$")),
-        ("Annual Rent Premium (total)", _v(va.get("annual_premium"),"$")),
-        ("Return on Investment",        f"{va.get('roi_pct') or 'N/A'}%"),
-        ("Value-Add Scope",             va.get("scope")),
-    ]))
+        ("Monthly Rent Premium",       _v(va.get("monthly_premium"),"$")),
+        ("Annual Rent Premium",        _v(va.get("annual_premium"),"$")),
+        ("Return on Investment",       f"{va.get('roi_pct') or 'N/A'}%"),
+        ("Value-Add Scope",            va.get("scope")),
+    ]):
+        xl.kv(k, v, alt=bool(i % 2))
 
-    # 5 — Property Tax & Abatement
-    story.append(PageBreak())
-    _hdr(story, "Property Tax & Tax Abatement Opportunity", "5")
-    story.append(_p("Property Tax Detail", fontname="Helvetica-Bold", size=11, space_before=4, space_after=4))
-    story.append(_kv([
+    # ── 5. Tax & Abatement ────────────────────────────────────────────────────
+    xl.section("5. PROPERTY TAX & TAX ABATEMENT")
+    xl.subsection("Property Tax Detail")
+    for i, (k, v) in enumerate([
         ("Parcel ID",             tax.get("parcel_id")),
         ("Assessed Market Value", _v(tax.get("assessed_value"),"$")),
         ("Millage — City",        tax.get("millage_city")),
         ("Millage — County",      tax.get("millage_county")),
         ("Total Millage Rate",    tax.get("millage_total")),
         ("Ad Valorem Tax",        _v(tax.get("tax_base"),"$")),
-        ("Solid Waste / Dumpster Fees", _v(tax.get("solid_waste_fee"),"$")),
+        ("Solid Waste / Fees",    _v(tax.get("solid_waste_fee"),"$")),
         ("Total Annual Tax Bill", _v(tax.get("total_tax"),"$")),
-    ]))
-    story.append(_p("NC Property Tax Abatement Program", fontname="Helvetica-Bold", size=11, space_before=10, space_after=4))
-    story.append(_kv([
+    ]):
+        xl.kv(k, v, alt=bool(i % 2))
+    xl.blank()
+    xl.subsection("Tax Abatement Program")
+    for i, (k, v) in enumerate([
         ("Program",               tax.get("abatement_program")),
         ("Abatement Percentage",  f"{tax.get('abatement_pct') or 'N/A'}%"),
         ("Commitment Term",       tax.get("abatement_term_note")),
         ("AMI Requirement",       f"{tax.get('ami_pct') or 'N/A'}% of Area Median Income"),
         ("Potential Annual Savings", _v(tax.get("abatement_annual_savings"),"$")),
-    ]))
-    story.append(_p("AMI Rent Compliance", fontname="Helvetica-Bold", size=11, space_before=10, space_after=4))
-    story.append(_tbl(
-        ["Bedroom Type","# Units","Max Allowable Rent (2025)","Avg In-Place Rent","Headroom/Unit","Units Compliant","% Compliant"],
-        [["2 Bedroom",
-          _v(tax.get("units_compliant"),"n"),
-          _v(tax.get("max_allowable_rent"),"$"),
-          _v(tax.get("avg_inplace_rent"),"$"),
-          _v(tax.get("rent_headroom"),"$"),
-          _v(tax.get("units_compliant"),"n"),
-          f"{tax.get('pct_compliant') or 'N/A'}%"]],
-        cw=[1.0*inch,0.6*inch,1.4*inch,1.2*inch,0.9*inch,1.1*inch,0.9*inch]
-    ))
+    ]):
+        xl.kv(k, v, alt=bool(i % 2))
+    xl.blank()
+    xl.subsection("AMI Rent Compliance")
+    xl.table_header(["Bedroom Type","Units","Max Allowable Rent","Avg In-Place Rent","Headroom/Unit","Units Compliant","% Compliant"])
+    xl.table_row(["2 Bedroom",
+        _v(tax.get("units_compliant"),"n"), _v(tax.get("max_allowable_rent"),"$"),
+        _v(tax.get("avg_inplace_rent"),"$"), _v(tax.get("rent_headroom"),"$"),
+        _v(tax.get("units_compliant"),"n"), f"{tax.get('pct_compliant') or 'N/A'}%"])
 
-    # 6 — Replacement Cost, Insurance & Management
-    story.append(PageBreak())
-    _hdr(story, "Replacement Cost, Insurance & Management", "6")
+    # ── 6. Replacement Cost, Insurance & Management ───────────────────────────
+    xl.section("6. REPLACEMENT COST, INSURANCE & MANAGEMENT")
+    xl.subsection("Replacement Cost")
+    for i, (k, v) in enumerate([
+        ("Cost Per Unit",      _v(repl.get("per_unit"),"$")),
+        ("Cost Per SF",        _v(repl.get("per_sf"),"$")),
+        ("Total Replacement",  _v(repl.get("total"),"$")),
+        ("Land Per Unit",      _v(repl.get("land_per_unit"),"$")),
+        ("Hard Cost Per SF",   _v(repl.get("hard_cost_per_sf"),"$")),
+        ("Soft Cost %",        f"{repl.get('soft_cost_pct') or 'N/A'}%"),
+        ("Source",             repl.get("source")),
+        ("Notes",              repl.get("notes")),
+    ]):
+        xl.kv(k, v, alt=bool(i % 2))
+    xl.blank()
+    xl.subsection("Insurance")
+    for i, (k, v) in enumerate([
+        ("Carrier / Provider", insur.get("carrier")),
+        ("Annual Premium",     _v(insur.get("annual_premium"),"$")),
+        ("Per Unit / Year",    _v(insur.get("per_unit"),"$")),
+        ("Quote Source",       insur.get("quote_source")),
+        ("Notes",              insur.get("notes")),
+    ]):
+        xl.kv(k, v, alt=bool(i % 2))
+    xl.blank()
+    xl.subsection("Property Management")
+    for i, (k, v) in enumerate([
+        ("Management Fee %",   f"{mgmt.get('fee_pct') or 'N/A'}% of EGI"),
+        ("Annual Fee",         _v(mgmt.get("fee_annual"),"$")),
+        ("Per Unit / Year",    _v(mgmt.get("fee_per_unit"),"$")),
+        ("Current Manager",    mgmt.get("current_manager")),
+        ("Proposed Manager",   mgmt.get("proposed_manager")),
+        ("Notes",              mgmt.get("notes")),
+    ]):
+        xl.kv(k, v, alt=bool(i % 2))
 
-    story.append(_p("Replacement Cost", fontname="Helvetica-Bold", size=11, space_before=4, space_after=4))
-    story.append(_kv([
-        ("Cost Per Unit",       _v(repl.get("per_unit"),"$")),
-        ("Cost Per SF",         _v(repl.get("per_sf"),"$")),
-        ("Total Replacement",   _v(repl.get("total"),"$")),
-        ("Land Per Unit",       _v(repl.get("land_per_unit"),"$")),
-        ("Hard Cost Per SF",    _v(repl.get("hard_cost_per_sf"),"$")),
-        ("Soft Cost %",         f"{repl.get('soft_cost_pct') or 'N/A'}%"),
-        ("Source",              repl.get("source")),
-        ("Notes",               repl.get("notes")),
-    ]))
+    # ── 7. Affordability ──────────────────────────────────────────────────────
+    xl.section("7. AFFORDABILITY & RENT GROWTH RUNWAY")
+    for i, (k, v) in enumerate([
+        ("Current In-Place Rent",              _v(afford.get("current_rent"),"$")),
+        ("Avg HH Income — 3-Mile (2025)",      _v(afford.get("avg_hh_income_3mi"),"$")),
+        ("Monthly Affordability @ 3× Rent",    _v(afford.get("monthly_affordability_3x"),"$")),
+        ("Rent Headroom (3-Mile, 2025)",        _v(afford.get("rent_headroom_3mi"),"$")),
+        ("Avg HH Income — 3-Mile (2030)",      _v(afford.get("avg_hh_income_2030_3mi"),"$")),
+        ("Monthly Affordability @ 3× (2030)",  _v(afford.get("monthly_affordability_2030_3x"),"$")),
+        ("Rent Headroom (3-Mile, 2030)",        _v(afford.get("rent_headroom_2030_3mi"),"$")),
+        ("Income-to-Rent Ratio",               afford.get("income_to_rent_ratio")),
+        ("Notes",                              afford.get("notes")),
+    ]):
+        xl.kv(k, v, alt=bool(i % 2))
 
-    story.append(_p("Insurance", fontname="Helvetica-Bold", size=11, space_before=10, space_after=4))
-    story.append(_kv([
-        ("Carrier / Provider",  insur.get("carrier")),
-        ("Annual Premium",      _v(insur.get("annual_premium"),"$")),
-        ("Per Unit / Year",     _v(insur.get("per_unit"),"$")),
-        ("Quote Source",        insur.get("quote_source")),
-        ("Notes",               insur.get("notes")),
-    ]))
-
-    story.append(_p("Property Management", fontname="Helvetica-Bold", size=11, space_before=10, space_after=4))
-    story.append(_kv([
-        ("Management Fee %",    f"{mgmt.get('fee_pct') or 'N/A'}% of EGI"),
-        ("Annual Fee",          _v(mgmt.get("fee_annual"),"$")),
-        ("Per Unit / Year",     _v(mgmt.get("fee_per_unit"),"$")),
-        ("Current Manager",     mgmt.get("current_manager")),
-        ("Proposed Manager",    mgmt.get("proposed_manager")),
-        ("Notes",               mgmt.get("notes")),
-    ]))
-
-    # 7 — Affordability Analysis
-    story.append(PageBreak())
-    _hdr(story, "Affordability & Rent Growth Runway", "7")
-    story.append(_kv([
-        ("Current In-Place Rent",          _v(afford.get("current_rent"),"$")),
-        ("Avg HH Income — 3-Mile (2025)",  _v(afford.get("avg_hh_income_3mi"),"$")),
-        ("Monthly Affordability @ 3× Rent",_v(afford.get("monthly_affordability_3x"),"$")),
-        ("Rent Headroom (3-Mile, 2025)",   _v(afford.get("rent_headroom_3mi"),"$")),
-        ("Avg HH Income — 3-Mile (2030)",  _v(afford.get("avg_hh_income_2030_3mi"),"$")),
-        ("Monthly Affordability @ 3× (2030)",_v(afford.get("monthly_affordability_2030_3x"),"$")),
-        ("Rent Headroom (3-Mile, 2030)",   _v(afford.get("rent_headroom_2030_3mi"),"$")),
-        ("Income-to-Rent Ratio",           afford.get("income_to_rent_ratio")),
-        ("Notes",                          afford.get("notes")),
-    ]))
-
-    # 8 — Demographics
-    story.append(PageBreak())
-    _hdr(story, "Demographics", "8")
-    story.append(_tbl(
-        ["Metric","3-Mile Radius","5-Mile Radius"],
-        [
-            ["Population (2025)",        _v(demo.get("pop_3mi"),"n"),   _v(demo.get("pop_5mi"),"n")],
-            ["Population (2030 proj.)",  _v(demo.get("pop_2030_3mi"),"n"), _v(demo.get("pop_2030_5mi"),"n")],
-            ["Population Growth (5-yr)", demo.get("pop_growth_3mi") or "—", demo.get("pop_growth_5mi") or "—"],
-            ["Median HH Income (2025)",  _v(demo.get("median_income_3mi"),"$"), _v(demo.get("median_income_5mi"),"$")],
-            ["Median HH Income (2030)",  _v(demo.get("median_income_2030_3mi"),"$"), _v(demo.get("median_income_2030_5mi"),"$")],
-            ["Income Growth (5-yr)",     demo.get("income_growth_3mi") or "—", demo.get("income_growth_5mi") or "—"],
-            ["Renter-Occupied Units",    demo.get("renter_pct_3mi") or "—", demo.get("renter_pct_5mi") or "—"],
-            ["Bachelor's Degree+",       demo.get("college_pct_3mi") or "—", demo.get("college_pct_5mi") or "—"],
-            ["White-Collar Workers",     demo.get("white_collar_pct_3mi") or "—", demo.get("white_collar_pct_5mi") or "—"],
-            ["Avg Home Value",           _v(demo.get("home_value"),"$"), "—"],
-        ],
-        cw=[2.8*inch,2.35*inch,2.35*inch]
-    ))
-    story.append(_p("Schools", fontname="Helvetica-Bold", size=11, space_before=10, space_after=4))
-    story.append(_kv([
-        ("School District",   demo.get("school_district")),
-        ("Elementary",        demo.get("elementary")),
-        ("Middle School",     demo.get("middle")),
-        ("High School",       demo.get("high_school")),
-    ]))
-    story.append(_p("Crime Rate", fontname="Helvetica-Bold", size=11, space_before=10, space_after=4))
-    story.append(_p(demo.get("crime") or "Not provided in OM — source independently.", color=WARN if not demo.get("crime") else DARK))
-    story.append(_p("Major Employers", fontname="Helvetica-Bold", size=11, space_before=10, space_after=4))
+    # ── 8. Demographics ───────────────────────────────────────────────────────
+    xl.section("8. DEMOGRAPHICS")
+    xl.table_header(["Metric","3-Mile Radius","5-Mile Radius"])
+    for i, row in enumerate([
+        ("Population (2025)",        _v(demo.get("pop_3mi"),"n"),   _v(demo.get("pop_5mi"),"n")),
+        ("Population (2030 proj.)",  _v(demo.get("pop_2030_3mi"),"n"), _v(demo.get("pop_2030_5mi"),"n")),
+        ("Population Growth (5-yr)", demo.get("pop_growth_3mi") or "—", demo.get("pop_growth_5mi") or "—"),
+        ("Median HH Income (2025)",  _v(demo.get("median_income_3mi"),"$"), _v(demo.get("median_income_5mi"),"$")),
+        ("Median HH Income (2030)",  _v(demo.get("median_income_2030_3mi"),"$"), _v(demo.get("median_income_2030_5mi"),"$")),
+        ("Income Growth (5-yr)",     demo.get("income_growth_3mi") or "—", demo.get("income_growth_5mi") or "—"),
+        ("Renter-Occupied Units",    demo.get("renter_pct_3mi") or "—", demo.get("renter_pct_5mi") or "—"),
+        ("Bachelor's Degree+",       demo.get("college_pct_3mi") or "—", demo.get("college_pct_5mi") or "—"),
+        ("White-Collar Workers",     demo.get("white_collar_pct_3mi") or "—", demo.get("white_collar_pct_5mi") or "—"),
+        ("Avg Home Value",           _v(demo.get("home_value"),"$"), "—"),
+    ]):
+        xl.table_row(list(row), alt=bool(i % 2))
+    xl.blank()
+    xl.subsection("Schools")
+    for i, (k, v) in enumerate([
+        ("School District", demo.get("school_district")),
+        ("Elementary",      demo.get("elementary")),
+        ("Middle School",   demo.get("middle")),
+        ("High School",     demo.get("high_school")),
+    ]):
+        xl.kv(k, v, alt=bool(i % 2))
+    xl.blank()
+    xl.subsection("Crime Rate")
+    xl.kv("Crime", demo.get("crime") or "Not provided in OM — source independently.")
     employers = demo.get("employers") or []
     if employers:
-        story.append(_tbl(
-            ["Employer","Drive Time","Employees","Sector","Notes"],
-            [[e.get("name","—"), e.get("drive") or "—", e.get("employees") or "—",
-              e.get("sector") or "—", e.get("notes") or "—"] for e in employers],
-            cw=[1.8*inch,0.85*inch,0.85*inch,1.2*inch,2.8*inch]
-        ))
+        xl.blank()
+        xl.subsection("Major Employers")
+        xl.table_header(["Employer","Drive Time","Employees","Sector","Notes"])
+        for i, e in enumerate(employers):
+            xl.table_row([
+                e.get("name","—"), e.get("drive") or "—", e.get("employees") or "—",
+                e.get("sector") or "—", e.get("notes") or "—"
+            ], alt=bool(i % 2))
 
-    # 9 — Unit Mix
-    story.append(PageBreak())
-    _hdr(story, "Unit Mix", "9")
+    # ── 9. Unit Mix ───────────────────────────────────────────────────────────
+    xl.section("9. UNIT MIX")
     if umix:
-        story.append(_tbl(
-            ["Type","Plan","Units","Mix%","SF","Mkt Rent","Mkt PSF","Eff Rent","Eff PSF","Target Rent","Upside"],
-            [[u.get("type","—"), u.get("plan") or "—", _v(u.get("count"),"n"),
-              _v(u.get("pct"),"%"), _v(u.get("sf"),"n"),
-              _v(u.get("market_rent"),"$"), f"${u.get('market_psf') or 0:.2f}",
-              _v(u.get("eff_rent"),"$"), f"${u.get('eff_psf') or 0:.2f}",
-              _v(u.get("target_rent"),"$"), _v(u.get("upside"),"$")] for u in umix],
-            hl_last=True,
-            cw=[0.9*inch,0.65*inch,0.5*inch,0.5*inch,0.5*inch,
-                0.8*inch,0.65*inch,0.8*inch,0.65*inch,0.8*inch,0.65*inch]
-        ))
-        story.append(_p("* Target Rent = comparable market-supported upside.", color=MID, size=8))
+        xl.table_header(["Type","Plan","Units","Mix%","SF","Mkt Rent","Mkt PSF","Eff Rent","Eff PSF","Target Rent","Upside"])
+        for i, u in enumerate(umix):
+            xl.table_row([
+                u.get("type","—"), u.get("plan") or "—", _v(u.get("count"),"n"),
+                _v(u.get("pct"),"%"), _v(u.get("sf"),"n"),
+                _v(u.get("market_rent"),"$"), f"${u.get('market_psf') or 0:.2f}",
+                _v(u.get("eff_rent"),"$"), f"${u.get('eff_psf') or 0:.2f}",
+                _v(u.get("target_rent"),"$"), _v(u.get("upside"),"$")
+            ], alt=bool(i % 2))
     else:
-        story.append(_p("No unit mix data found.", color=WARN))
+        xl.kv("Note", "No unit mix data found.")
 
-    # 10 — Utilities
-    story.append(PageBreak())
-    _hdr(story, "Utility Information", "10")
-    if utils:
-        story.append(_tbl(
-            ["Utility","Billing Method","Paid By","Reimbursement","Fee","Annual Income","Notes"],
-            [[u.get("name","—"), u.get("method") or "—", u.get("paid_by") or "—",
-              u.get("reimbursement") or "N/A", u.get("fee") or "—",
-              _v(u.get("annual_income"),"$"), u.get("notes") or "—"] for u in utils],
-            cw=[0.85*inch,1.1*inch,0.65*inch,1.2*inch,0.75*inch,0.85*inch,2.05*inch]
-        ))
+    # ── 10. Utilities ─────────────────────────────────────────────────────────
+    xl.section("10. UTILITY INFORMATION")
+    if utils_:
+        xl.table_header(["Utility","Billing Method","Paid By","Reimbursement","Fee","Annual Income","Notes"])
+        for i, u in enumerate(utils_):
+            xl.table_row([
+                u.get("name","—"), u.get("method") or "—", u.get("paid_by") or "—",
+                u.get("reimbursement") or "N/A", u.get("fee") or "—",
+                _v(u.get("annual_income"),"$"), u.get("notes") or "—"
+            ], alt=bool(i % 2))
     else:
-        story.append(_p("No utility data found.", color=WARN))
+        xl.kv("Note", "No utility data found.")
 
-    # 11 — Site Info
-    story.append(PageBreak())
-    _hdr(story, "Site Information", "11")
-    story.append(_kv([
-        ("Roof / Age",        f"{site.get('roof') or 'N/A'}  —  {site.get('roof_age') or 'N/A'}"),
-        ("Exterior",          site.get("exterior")),
-        ("Foundation",        site.get("foundation")),
-        ("HVAC",              site.get("hvac")),
-        ("Plumbing",          site.get("plumbing")),
-        ("Wiring",            site.get("wiring")),
-        ("Hot Water",         site.get("hot_water")),
-        ("Washer / Dryer",    site.get("washer_dryer")),
-        ("Life Safety",       site.get("life_safety") or "Verify — not specified"),
-        ("Construction",      site.get("notes")),
-    ]))
-    story.append(_p("Parking & Site Features", fontname="Helvetica-Bold", size=11, space_before=10, space_after=4))
-    story.append(_kv([
-        ("Open Spaces",   _v(site.get("parking_open"),"n")),
-        ("Reserved",      f"{_v(site.get('parking_reserved'),'n')} ({site.get('reserved_fee') or 'N/A'}/mo)"),
-        ("Covered",       _v(site.get("parking_covered"),"n")),
-        ("Garage",        site.get("parking_garage") or "None"),
-        ("Total / Ratio", f"{_v(site.get('parking_total'),'n')} ({site.get('parking_ratio') or 'N/A'})"),
-        ("Pet Yards",     site.get("pet_yards") or "N/A"),
-        ("Storage",       site.get("storage") or "N/A"),
-    ]))
+    # ── 11. Site Info ─────────────────────────────────────────────────────────
+    xl.section("11. SITE INFORMATION")
+    for i, (k, v) in enumerate([
+        ("Roof / Age",       f"{site.get('roof') or 'N/A'}  —  {site.get('roof_age') or 'N/A'}"),
+        ("Exterior",         site.get("exterior")),
+        ("Foundation",       site.get("foundation")),
+        ("HVAC",             site.get("hvac")),
+        ("Plumbing",         site.get("plumbing")),
+        ("Wiring",           site.get("wiring")),
+        ("Hot Water",        site.get("hot_water")),
+        ("Washer / Dryer",   site.get("washer_dryer")),
+        ("Life Safety",      site.get("life_safety") or "Verify — not specified"),
+        ("Construction",     site.get("notes")),
+    ]):
+        xl.kv(k, v, alt=bool(i % 2))
+    xl.blank()
+    xl.subsection("Parking & Site Features")
+    for i, (k, v) in enumerate([
+        ("Open Spaces",    _v(site.get("parking_open"),"n")),
+        ("Reserved",       f"{_v(site.get('parking_reserved'),'n')} ({site.get('reserved_fee') or 'N/A'}/mo)"),
+        ("Covered",        _v(site.get("parking_covered"),"n")),
+        ("Garage",         site.get("parking_garage") or "None"),
+        ("Total / Ratio",  f"{_v(site.get('parking_total'),'n')} ({site.get('parking_ratio') or 'N/A'})"),
+        ("Pet Yards",      site.get("pet_yards") or "N/A"),
+        ("Storage",        site.get("storage") or "N/A"),
+    ]):
+        xl.kv(k, v, alt=bool(i % 2))
 
-    # 12 — Rent Comparables
-    story.append(PageBreak())
-    _hdr(story, "Rent Comparable Summary", "12")
-
-    # Garden comps group
+    # ── 12. Rent Comparables ──────────────────────────────────────────────────
+    xl.section("12. RENT COMPARABLE SUMMARY")
     if rg:
-        story.append(_p("Two Bedroom Garden Comparables", fontname="Helvetica-Bold", size=11, space_before=4, space_after=4))
-        story.append(_tbl(
-            ["Property","Yr Built","Distance","Rent","vs. Subject","Notes"],
-            [[c.get("name","—"), _v(c.get("year_built")), c.get("distance") or "—",
-              _v(c.get("rent"),"$"),
-              f"{'+' if (c.get('rent') or 0) >= 1393 else ''}{int((c.get('rent') or 0) - 1393):+,}" if c.get("rent") else "—",
-              c.get("notes") or "—"] for c in rg],
-            cw=[2.1*inch,0.7*inch,0.8*inch,0.9*inch,0.85*inch,2.15*inch]
-        ))
-
-    # Townhouse comps group
+        xl.subsection("Two Bedroom Garden Comparables")
+        xl.table_header(["Property","Yr Built","Distance","Rent","vs. Subject","Notes"])
+        for i, c in enumerate(rg):
+            vs = f"{int((c.get('rent') or 0) - 1393):+,}" if c.get("rent") else "—"
+            xl.table_row([
+                c.get("name","—"), _v(c.get("year_built")), c.get("distance") or "—",
+                _v(c.get("rent"),"$"), vs, c.get("notes") or "—"
+            ], alt=bool(i % 2))
     if rth:
-        story.append(_p("Two Bedroom Townhouse Comparables", fontname="Helvetica-Bold", size=11, space_before=10, space_after=4))
-        story.append(_tbl(
-            ["Property","Yr Built","Distance","Rent","vs. Subject","Notes"],
-            [[c.get("name","—"), _v(c.get("year_built")), c.get("distance") or "—",
-              _v(c.get("rent"),"$"),
-              f"{int((c.get('rent') or 0) - 1557):+,}" if c.get("rent") else "—",
-              c.get("notes") or "—"] for c in rth],
-            cw=[2.1*inch,0.7*inch,0.8*inch,0.9*inch,0.85*inch,2.15*inch]
-        ))
-
-    # Full comp detail if available
+        xl.blank()
+        xl.subsection("Two Bedroom Townhouse Comparables")
+        xl.table_header(["Property","Yr Built","Distance","Rent","vs. Subject","Notes"])
+        for i, c in enumerate(rth):
+            vs = f"{int((c.get('rent') or 0) - 1557):+,}" if c.get("rent") else "—"
+            xl.table_row([
+                c.get("name","—"), _v(c.get("year_built")), c.get("distance") or "—",
+                _v(c.get("rent"),"$"), vs, c.get("notes") or "—"
+            ], alt=bool(i % 2))
     if rcomps:
-        story.append(_p("Full Comparable Detail", fontname="Helvetica-Bold", size=11, space_before=10, space_after=4))
-        story.append(_tbl(
-            ["#","Property","Type","Yr Built","Distance","Units","Occ%","Mkt Rent","Eff Rent"],
-            [[rc.get("id","—"), rc.get("name","—"),
-              rc.get("comp_type") or "—",
-              _v(rc.get("year_built")),
-              rc.get("distance") or "—",
-              _v(rc.get("units"),"n"),
-              _v(rc.get("occupancy"),"%"),
-              _v(rc.get("total_market"),"$"),
-              _v(rc.get("total_eff"),"$")] for rc in rcomps],
-            cw=[0.3*inch,1.6*inch,0.75*inch,0.55*inch,0.7*inch,0.5*inch,0.5*inch,0.8*inch,0.8*inch]
-        ))
-    elif not rg and not rth:
-        story.append(_p("No rent comparable data found.", color=WARN))
+        xl.blank()
+        xl.subsection("Full Comparable Detail")
+        xl.table_header(["#","Property","Type","Yr Built","Distance","Units","Occ%","Mkt Rent","Eff Rent"])
+        for i, rc in enumerate(rcomps):
+            xl.table_row([
+                rc.get("id","—"), rc.get("name","—"), rc.get("comp_type") or "—",
+                _v(rc.get("year_built")), rc.get("distance") or "—",
+                _v(rc.get("units"),"n"), _v(rc.get("occupancy"),"%"),
+                _v(rc.get("total_market"),"$"), _v(rc.get("total_eff"),"$")
+            ], alt=bool(i % 2))
+    if not rg and not rth and not rcomps:
+        xl.kv("Note", "No rent comparable data found.")
 
-
-    # 13 — Financial Analysis
-    story.append(PageBreak())
-    _hdr(story, "Financial Analysis — Operating Statement", "13")
-    periods = fin.get("periods") or []
+    # ── 13. Financial Analysis ────────────────────────────────────────────────
+    xl.section("13. FINANCIAL ANALYSIS — OPERATING STATEMENT")
+    periods   = fin.get("periods") or []
     inc_lines = fin.get("income_lines") or []
     exp_lines = fin.get("expense_lines") or []
 
     if periods and (inc_lines or exp_lines):
-        # Use up to 5 periods; Pro Forma column gets a gold highlight
         p_all = periods[:5]
-        # Narrow col widths: item 1.8", each period 0.72", note fills the rest
-        note_w = max(1.2*inch, 7.5*inch - 1.8*inch - len(p_all)*0.72*inch)
-        cw_fin = [1.8*inch] + [0.72*inch]*len(p_all) + [note_w]
+        headers = ["Line Item"] + p_all + ["Underwriting Note"]
+        xl.table_header(headers)
 
-        def frow(item, key="values"):
-            vals = item.get(key) or {}
+        def fin_row(item):
+            vals = item.get("values") or {}
             row = [item.get("item","—")]
             for p in p_all:
                 v = vals.get(p)
-                cell = _v(v,"$") if v is not None else "—"
-                row.append(cell)
+                row.append(_v(v,"$") if v is not None else "—")
             row.append(item.get("note") or "")
             return row
 
-        note_style = ParagraphStyle("fn", fontName="Helvetica", fontSize=7,
-                                    textColor=MID, leading=10, wordWrap="CJK")
-        item_style = ParagraphStyle("fi", fontName="Helvetica", fontSize=7.5,
-                                    textColor=DARK, leading=11, wordWrap="CJK")
-        num_style  = ParagraphStyle("fnum", fontName="Helvetica", fontSize=7.5,
-                                    textColor=DARK, leading=11, alignment=2)  # right-align numbers
-
-        def para_row(row_data, is_tot=False, is_sub=False, is_sec=False):
-            result = []
-            for idx, cell in enumerate(row_data):
-                txt = str(cell) if cell is not None else "—"
-                if is_tot:
-                    s = ParagraphStyle("x", fontName="Helvetica-Bold", fontSize=7.5,
-                                       textColor=GOLD_L, leading=11,
-                                       alignment=2 if idx > 0 and idx < len(row_data)-1 else 0)
-                elif is_sub:
-                    s = ParagraphStyle("x", fontName="Helvetica-Bold", fontSize=7.5,
-                                       textColor=DARK, leading=11,
-                                       alignment=2 if idx > 0 and idx < len(row_data)-1 else 0)
-                elif is_sec:
-                    s = ParagraphStyle("x", fontName="Helvetica-Bold", fontSize=8,
-                                       textColor=WARN, leading=12)
-                elif idx == 0:
-                    s = item_style
-                elif idx == len(row_data)-1:
-                    s = note_style
-                else:
-                    s = ParagraphStyle("x", fontName="Helvetica", fontSize=7.5,
-                                       textColor=DARK, leading=11, alignment=2)
-                result.append(Paragraph(txt, s))
-            return result
-
-        # Build header row
-        hdr_s = ParagraphStyle("fh", fontName="Helvetica-Bold", fontSize=7.5,
-                               textColor=GOLD_L, leading=11)
-        p_all_rows = [[Paragraph(h, hdr_s) for h in ["Line Item"]+p_all+["Underwriting Note"]]]
-        p_smap = []
-
-        sec_row = para_row(["INCOME"]+[""]*len(p_all)+[""], is_sec=True)
-        p_all_rows.append(sec_row); p_smap.append((len(p_all_rows)-1,"sec"))
-
-        for item in inc_lines:
-            is_t = item.get("is_total",False)
-            is_s = item.get("is_subtotal",False)
-            p_all_rows.append(para_row(frow(item), is_tot=is_t, is_sub=is_s))
-            if is_t:   p_smap.append((len(p_all_rows)-1,"tot"))
-            elif is_s: p_smap.append((len(p_all_rows)-1,"sub"))
-
-        sec_row = para_row(["EXPENSES"]+[""]*len(p_all)+[""], is_sec=True)
-        p_all_rows.append(sec_row); p_smap.append((len(p_all_rows)-1,"sec"))
-
-        for item in exp_lines:
-            is_t = item.get("is_total",False)
-            is_s = item.get("is_subtotal",False)
-            p_all_rows.append(para_row(frow(item,"values"), is_tot=is_t, is_sub=is_s))
-            if is_t:   p_smap.append((len(p_all_rows)-1,"tot"))
-            elif is_s: p_smap.append((len(p_all_rows)-1,"sub"))
+        for label, lines_list, is_section in [
+            ("INCOME",   inc_lines, True),
+            ("EXPENSES", exp_lines, True),
+        ]:
+            # Section label row
+            xl.ws.merge_cells(f"A{xl.row}:{get_column_letter(2+len(p_all))}{xl.row}")
+            xl._set(f"A{xl.row}", label, bold=True, bg=C_GOLD_P, fg=C_DARK, size=9)
+            xl.row += 1
+            for i, item in enumerate(lines_list):
+                is_t = item.get("is_total", False)
+                bg = C_DARK2 if is_t else (C_GOLD_P if item.get("is_subtotal") else (C_ALT if i % 2 else C_WHITE))
+                fg = C_GOLD_L if is_t else C_DARK
+                row_vals = fin_row(item)
+                for j, v in enumerate(row_vals):
+                    col = get_column_letter(1 + j)
+                    xl._set(f"{col}{xl.row}", v, bold=is_t, bg=bg, fg=fg, size=9,
+                            align_h="right" if 0 < j < len(row_vals) - 1 else "left")
+                xl.row += 1
 
         noi = fin.get("noi") or {}
-        p_all_rows.append(para_row(["NET OPERATING INCOME"]+[_v(noi.get(p),"$") for p in p_all]+["Key bottom-line metric"], is_tot=True))
-        p_smap.append((len(p_all_rows)-1,"tot"))
-
-        capex = fin.get("capex") or {}
-        p_all_rows.append(para_row(["  Capital Reserves"]+[_v(capex.get(p),"$") for p in p_all]+["Market standard $225–$300/unit/yr"]))
-
-        cffo = fin.get("cffo") or {}
-        p_all_rows.append(para_row(["CASH FLOW FROM OPERATIONS"]+[_v(cffo.get(p),"$") for p in p_all]+["NOI minus capex reserves"], is_tot=True))
-        p_smap.append((len(p_all_rows)-1,"tot"))
-
-        # Adjust column widths: line item 2.0", periods 0.8" each, note gets remainder
-        # cw already set above
-
-        t = Table(p_all_rows, colWidths=cw_fin, repeatRows=1)
-        ts = [
-            ("BACKGROUND",(0,0),(-1,0), DARK),
-            ("FONTSIZE",  (0,0),(-1,-1), 7.5),
-            ("TOPPADDING",(0,0),(-1,-1), 4), ("BOTTOMPADDING",(0,0),(-1,-1), 5),
-            ("LEFTPADDING",(0,0),(-1,-1), 5), ("RIGHTPADDING",(0,0),(-1,-1), 5),
-            ("GRID",(0,0),(-1,-1), 0.3, BORDER),
-            ("VALIGN",(0,0),(-1,-1), "TOP"),
-            ("ROWBACKGROUNDS",(0,1),(-1,-1), [colors.white, ALT]),
-        ]
-        for ridx, stype in p_smap:
-            if stype=="tot":
-                ts += [("BACKGROUND",(0,ridx),(-1,ridx),DARK2)]
-            elif stype=="sub":
-                ts += [("BACKGROUND",(0,ridx),(-1,ridx),GOLD_P)]
-            elif stype=="sec":
-                ts += [("BACKGROUND",(0,ridx),(-1,ridx),GOLD_P)]
-        t.setStyle(TableStyle(ts))
-        story.append(t)
+        for label, source, is_tot in [
+            ("NET OPERATING INCOME",      noi,                     True),
+            ("  Capital Reserves",        fin.get("capex") or {}, False),
+            ("CASH FLOW FROM OPERATIONS", fin.get("cffo") or {}, True),
+        ]:
+            bg = C_DARK2 if is_tot else C_WHITE
+            fg = C_GOLD_L if is_tot else C_DARK
+            row_vals = [label] + [_v(source.get(p),"$") for p in p_all] + [""]
+            for j, v in enumerate(row_vals):
+                col = get_column_letter(1 + j)
+                xl._set(f"{col}{xl.row}", v, bold=is_tot, bg=bg, fg=fg, size=9,
+                        align_h="right" if 0 < j < len(row_vals) - 1 else "left")
+            xl.row += 1
     else:
-        story.append(_p("No financial analysis data found.", color=WARN))
+        xl.kv("Note", "No financial analysis data found.")
 
-    # 14 — Sale Comps
-    story.append(PageBreak())
-    _hdr(story, "Sale Comparables", "14")
+    # ── 14. Sale Comparables ──────────────────────────────────────────────────
+    xl.section("14. SALE COMPARABLES")
     if scomps:
-        story.append(_tbl(
-            ["Property","Address","Date","Yr Built","Units","Sale Price","$/Unit","$/SF","Cap Rate","Occ","Buyer","Seller","Notes"],
-            [[sc.get("name","—"), f"{sc.get('address') or ''} {sc.get('city_state') or ''}".strip() or "—",
-              sc.get("date") or "—", _v(sc.get("year_built")), _v(sc.get("units"),"n"),
-              _v(sc.get("price"),"$"), _v(sc.get("ppu"),"$"), _v(sc.get("ppsf"),"$"),
-              sc.get("cap_rate") or "—", sc.get("occupancy") or "—",
-              sc.get("buyer") or "—", sc.get("seller") or "—",
-              sc.get("notes") or "—"] for sc in scomps],
-            cw=[0.9*inch,0.85*inch,0.55*inch,0.45*inch,0.4*inch,
-                0.75*inch,0.65*inch,0.5*inch,0.55*inch,0.45*inch,0.85*inch,0.85*inch,0.7*inch]
-        ))
+        xl.table_header(["Property","Address","Date","Yr Built","Units","Sale Price","$/Unit","$/SF","Cap Rate","Occ","Buyer","Seller","Notes"])
+        for i, sc in enumerate(scomps):
+            xl.table_row([
+                sc.get("name","—"),
+                f"{sc.get('address') or ''} {sc.get('city_state') or ''}".strip() or "—",
+                sc.get("date") or "—", _v(sc.get("year_built")), _v(sc.get("units"),"n"),
+                _v(sc.get("price"),"$"), _v(sc.get("ppu"),"$"), _v(sc.get("ppsf"),"$"),
+                sc.get("cap_rate") or "—", sc.get("occupancy") or "—",
+                sc.get("buyer") or "—", sc.get("seller") or "—", sc.get("notes") or "—"
+            ], alt=bool(i % 2))
     else:
-        story.append(_p("⚠ Sale comps not in OM. Source from CoStar, RCA, or listing broker.", color=WARN))
+        xl.kv("Note", "Sale comps not in OM. Source from CoStar, RCA, or listing broker.")
 
-    # 15 — Flags
-    story.append(PageBreak())
-    _hdr(story, "Underwriting Flags & Notes", "15")
+    # ── 15. Underwriting Flags ────────────────────────────────────────────────
+    xl.section("15. UNDERWRITING FLAGS & NOTES")
+    flag_bg = {"Warning": C_WARN, "Opportunity": C_GREEN, "Info": C_BLUE, "Verify": C_PURPLE}
     if flags:
-        cat_map = {
-            "Warning":     (RED_B,    RED),
-            "Opportunity": (GREEN_B,  GREEN),
-            "Verify":      (PURPLE_B, PURPLE),
-            "Info":        (BLUE_B,   BLUE),
-        }
-        wrap_detail = ParagraphStyle("fd", fontName="Helvetica", fontSize=8,
-                                     textColor=DARK, leading=12, wordWrap="CJK")
-        wrap_title  = ParagraphStyle("ft", fontName="Helvetica-Bold", fontSize=8,
-                                     textColor=DARK, leading=12, wordWrap="CJK")
-        fdata = [[
-            Paragraph("Category", ParagraphStyle("fh", fontName="Helvetica-Bold", fontSize=8, textColor=GOLD_L)),
-            Paragraph("Title",    ParagraphStyle("fh", fontName="Helvetica-Bold", fontSize=8, textColor=GOLD_L)),
-            Paragraph("Detail",   ParagraphStyle("fh", fontName="Helvetica-Bold", fontSize=8, textColor=GOLD_L)),
-        ]]
-        fstyle = [
-            ("BACKGROUND",(0,0),(-1,0), DARK),
-            ("FONTSIZE",  (0,0),(-1,-1), 8),
-            ("TOPPADDING",(0,0),(-1,-1), 6), ("BOTTOMPADDING",(0,0),(-1,-1), 6),
-            ("LEFTPADDING",(0,0),(-1,-1), 8), ("RIGHTPADDING",(0,0),(-1,-1), 8),
-            ("GRID",(0,0),(-1,-1), 0.3, BORDER),
-            ("VALIGN",(0,0),(-1,-1), "TOP"),
-            ("ROWBACKGROUNDS",(0,1),(-1,-1), [colors.white, ALT]),
-        ]
-        for i, f in enumerate(flags, 1):
+        xl.table_header(["Category","Title","Detail"])
+        for f in flags:
             cat = f.get("category","Info")
-            bg, tc = cat_map.get(cat, (BLUE_B, BLUE))
-            cat_style = ParagraphStyle("fc", fontName="Helvetica-Bold", fontSize=8,
-                                       textColor=tc, leading=12)
-            fdata.append([
-                Paragraph(cat, cat_style),
-                Paragraph(f.get("title",""), wrap_title),
-                Paragraph(f.get("detail",""), wrap_detail),   # full text, no truncation
-            ])
-            fstyle += [("BACKGROUND",(0,i),(0,i), bg)]
-        # Column widths: Category=0.9", Title=1.6", Detail=5.0" — detail gets most space
-        ft = Table(fdata, colWidths=[0.9*inch, 1.6*inch, 5.0*inch])
-        ft.setStyle(TableStyle(fstyle))
-        story.append(ft)
+            bg  = flag_bg.get(cat, C_BLUE)
+            for j, v in enumerate([cat, f.get("title",""), f.get("detail","")]):
+                col = get_column_letter(1 + j)
+                xl._set(f"{col}{xl.row}", v, bg=bg, size=9, bold=(j == 0), wrap=True)
+            xl.ws.row_dimensions[xl.row].height = 30
+            xl.row += 1
+    else:
+        xl.kv("Note", "No flags generated.")
 
-    # Market overview
-    if any(v for v in mkt.values() if v):
-        story.append(PageBreak())
-        _hdr(story, "Market & Submarket Overview", "16")
+    # ── 16. Market Overview ───────────────────────────────────────────────────
+    xl.section("16. MARKET & SUBMARKET OVERVIEW")
+    if mkt.get("market_summary"):
+        xl.subsection("Market Summary")
+        xl.kv("Summary", mkt["market_summary"])
+    mkt_rows = [(k,v) for k,v in [
+        ("Submarket",        mkt.get("submarket")),
+        ("Sub. Occupancy",   mkt.get("sub_occupancy")),
+        ("Sub. Avg Rent",    _v(mkt.get("sub_rent"),"$")),
+        ("Sub. Rent Growth", mkt.get("sub_growth")),
+        ("Metro Inventory",  mkt.get("metro_inventory")),
+        ("Pipeline",         mkt.get("pipeline")),
+        ("Absorption",       mkt.get("absorption")),
+        ("Investment Vol.",  mkt.get("investment_vol")),
+    ] if v]
+    if mkt_rows:
+        xl.blank()
+        xl.subsection("Submarket Metrics")
+        for i, (k, v) in enumerate(mkt_rows):
+            xl.kv(k, v, alt=bool(i % 2))
+    devs = mkt.get("major_developments") or []
+    if devs and any(d.get("name") for d in devs):
+        xl.blank()
+        xl.subsection("Major Economic Developments")
+        xl.table_header(["Development","Description","Est. Cost","Jobs","Timeline"])
+        for i, d in enumerate(devs):
+            if d.get("name"):
+                xl.table_row([
+                    d.get("name","—"), d.get("description") or "—",
+                    d.get("cost") or "—", d.get("jobs") or "—",
+                    d.get("timeline") or "—"
+                ], alt=bool(i % 2))
 
-        if mkt.get("market_summary"):
-            story.append(_p("Market Summary", fontname="Helvetica-Bold", size=11, space_before=4, space_after=4))
-            story.append(_p(mkt["market_summary"], color=DARK))
+    # ── Disclaimer ────────────────────────────────────────────────────────────
+    xl.blank()
+    xl.ws.merge_cells(f"A{xl.row}:M{xl.row}")
+    xl._set(f"A{xl.row}",
+        "DISCLAIMER: AI-generated from the uploaded OM. For internal underwriting reference only. "
+        "Verify all figures independently. Powered by Anthropic Claude.",
+        bg=C_ALT, fg=C_MID, size=8, italic=True, border=False)
 
-        mkt_rows = [(k,v) for k,v in [
-            ("Submarket",        mkt.get("submarket")),
-            ("Sub. Occupancy",   mkt.get("sub_occupancy")),
-            ("Sub. Avg Rent",    _v(mkt.get("sub_rent"),"$")),
-            ("Sub. Rent Growth", mkt.get("sub_growth")),
-            ("Metro Inventory",  mkt.get("metro_inventory")),
-            ("Pipeline",         mkt.get("pipeline")),
-            ("Absorption",       mkt.get("absorption")),
-            ("Investment Vol.",  mkt.get("investment_vol")),
-        ] if v]
-        if mkt_rows:
-            story.append(_p("Submarket Metrics", fontname="Helvetica-Bold", size=11, space_before=10, space_after=4))
-            story.append(_kv(mkt_rows))
-
-        devs = mkt.get("major_developments") or []
-        if devs and any(d.get("name") for d in devs):
-            story.append(_p("Major Economic Developments", fontname="Helvetica-Bold", size=11, space_before=10, space_after=4))
-            story.append(_tbl(
-                ["Development","Description","Est. Cost","Jobs","Timeline"],
-                [[d.get("name","—"), d.get("description") or "—",
-                  d.get("cost") or "—", d.get("jobs") or "—",
-                  d.get("timeline") or "—"] for d in devs if d.get("name")],
-                cw=[1.5*inch, 2.8*inch, 1.0*inch, 0.9*inch, 1.3*inch]
-            ))
-
-    story.append(Spacer(1,20))
-    story.append(HRFlowable(width="100%", thickness=0.5, color=BORDER))
-    story.append(_p("DISCLAIMER: AI-generated from the uploaded OM. For internal underwriting reference only. Verify all figures independently. Powered by Anthropic Claude.", color=MID, size=7.5, space_before=6))
-
-    doc.build(story, onFirstPage=_footer(prop, date), onLaterPages=_footer(prop, date))
+    buf = io.BytesIO()
+    wb.save(buf)
     return buf.getvalue()
+
+
+
+
+
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -1372,7 +1278,7 @@ with st.sidebar:
     st.markdown("---")
     st.markdown("**What this does**")
     st.markdown("""
-Upload any Multifamily Offering Memorandum PDF and get a structured 16-section underwriting report.
+Upload any Multifamily Offering Memorandum PDF and get a structured 16-sheet Excel underwriting report.
 
 **Covers:**
 - Basic property details
@@ -1433,7 +1339,7 @@ if uploaded is None:
     with col2:
         st.info("**Step 2** — Click Analyze (takes 30–90 sec)")
     with col3:
-        st.info("**Step 3** — Download the underwriting PDF")
+        st.info("**Step 3** — Download the underwriting Excel")
     st.stop()
 
 # File info
@@ -1471,10 +1377,10 @@ if st.button("🔍  Analyze Offering Memorandum", type="primary", use_container_
         def log(msg): set_progress(55, msg)
         data = analyze_om(pdf_text, api_key, log)
 
-        set_progress(75, "Generating PDF report…")
+        set_progress(75, "Generating Excel report…")
 
-        # Step 3 — Build PDF
-        pdf_bytes = build_pdf(data, uploaded.name)
+        # Step 3 — Build Excel
+        excel_bytes = build_excel(data, uploaded.name)
 
         set_progress(100, "Done!")
         progress_bar.empty()
@@ -1494,10 +1400,10 @@ if st.button("🔍  Analyze Offering Memorandum", type="primary", use_container_
 
     safe = re.sub(r"[^a-zA-Z0-9_\- ]", "", prop).strip().replace(" ","_")
     st.download_button(
-        label="⬇️  Download Underwriting Report (PDF)",
-        data=pdf_bytes,
-        file_name=f"{safe}_Underwriting_Report.pdf",
-        mime="application/pdf",
+        label="⬇️  Download Underwriting Report (Excel)",
+        data=excel_bytes,
+        file_name=f"{safe}_Underwriting_Report.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         use_container_width=True,
     )
 
