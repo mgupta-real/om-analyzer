@@ -101,26 +101,40 @@ SCHEMA:
   "broker": {"name": null, "agents": [], "date": null},
   "financing": {
     "offering_type": null,
-    "loan_type": null,
-    "lender": null,
-    "loan_amount": null,
-    "loan_to_value": null,
-    "interest_rate": null,
-    "rate_type": null,
-    "amortization_years": null,
-    "loan_term_years": null,
-    "interest_only_period": null,
-    "maturity_date": null,
-    "origination_date": null,
-    "monthly_payment": null,
-    "annual_debt_service": null,
-    "dscr": null,
-    "prepayment_penalty": null,
-    "assumable": null,
-    "recourse": null,
-    "existing_debt": null,
     "debt_contact": null,
-    "notes": null
+    "notes": null,
+    "new_financing": {
+      "loan_type": null,
+      "lender": null,
+      "loan_amount": null,
+      "loan_to_value": null,
+      "interest_rate": null,
+      "rate_type": null,
+      "amortization_years": null,
+      "loan_term_years": null,
+      "interest_only_period": null,
+      "dscr": null,
+      "recourse": null,
+      "notes": null
+    },
+    "assumable_debt": {
+      "loan_type": null,
+      "lender": null,
+      "loan_amount": null,
+      "loan_to_value": null,
+      "interest_rate": null,
+      "rate_type": null,
+      "amortization_years": null,
+      "loan_term_years": null,
+      "origination_date": null,
+      "maturity_date": null,
+      "monthly_payment": null,
+      "annual_debt_service": null,
+      "dscr": null,
+      "prepayment_penalty": null,
+      "recourse": null,
+      "notes": null
+    }
   },
   "property": {
     "name": null, "address": null, "city": null, "state": null, "zip": null,
@@ -376,20 +390,18 @@ CRITICAL EXTRACTION RULES — read every page carefully:
    Include flags for: occupancy decline, HOA pool risk, insurance inconsistency, tax abatement opportunity,
    value-add ROI, pro forma vacancy assumption, bad debt assumption, Eastland Yards catalyst.
 
-8. FINANCING: Extract all debt/financing terms from the OM:
+8. FINANCING: Extract all debt/financing terms from the OM into the split structure:
    - offering_type (e.g. "Free & Clear", "Assumable Debt", "All Cash")
-   - loan_type (Agency, CMBS, Bridge, Bank, etc.)
-   - lender name if disclosed
-   - loan_amount, loan_to_value (LTV %)
-   - interest_rate, rate_type (Fixed / Floating / Hybrid)
-   - amortization_years, loan_term_years, interest_only_period
-   - maturity_date, origination_date if disclosed
-   - monthly_payment, annual_debt_service if shown
-   - dscr (Debt Service Coverage Ratio) if shown
-   - prepayment_penalty description if mentioned
-   - assumable (true/false/null), recourse (full/partial/non/null)
-   - existing_debt amount if any, debt_contact name/info
-   - If all-cash required, set offering_type = "All Cash" and leave loan fields null
+   - debt_contact: name/info of financing contact if mentioned
+   - new_financing: populate if the OM provides a new loan quote or financing guidance:
+     loan_type, lender, loan_amount, loan_to_value, interest_rate, rate_type,
+     amortization_years, loan_term_years, interest_only_period, dscr, recourse
+   - assumable_debt: populate if the OM describes existing assumable debt:
+     loan_type, lender, loan_amount, loan_to_value, interest_rate, rate_type,
+     amortization_years, loan_term_years, origination_date, maturity_date,
+     monthly_payment, annual_debt_service, dscr, prepayment_penalty, recourse
+   - If property is Free & Clear with no debt, leave both sub-objects null
+   - If all-cash purchase required, set offering_type = "All Cash"
 
 9. SALE COMPS: For every sale comp, extract buyer and seller names if disclosed in the OM.
 
@@ -718,29 +730,97 @@ def build_pdf(d: dict, filename: str) -> bytes:
     # 2 — Financing & Debt Terms
     story.append(PageBreak())
     _hdr(story, "Financing & Debt Terms", "2")
+
     story.append(_kv([
-        ("Offering Type",           fin_info.get("offering_type")),
-        ("Loan Type",               fin_info.get("loan_type")),
-        ("Lender",                  fin_info.get("lender")),
-        ("Loan Amount",             _v(fin_info.get("loan_amount"),"$")),
-        ("Loan-to-Value (LTV)",     f"{fin_info.get('loan_to_value') or 'N/A'}%"),
-        ("Interest Rate",           f"{fin_info.get('interest_rate') or 'N/A'}%"),
-        ("Rate Type",               fin_info.get("rate_type")),
-        ("Loan Term",               fin_info.get("loan_term_years")),
-        ("Amortization Period",     fin_info.get("amortization_years")),
-        ("Interest-Only Period",    fin_info.get("interest_only_period")),
-        ("Origination Date",        fin_info.get("origination_date")),
-        ("Maturity Date",           fin_info.get("maturity_date")),
-        ("Monthly Payment",         _v(fin_info.get("monthly_payment"),"$")),
-        ("Annual Debt Service",     _v(fin_info.get("annual_debt_service"),"$")),
-        ("DSCR",                    fin_info.get("dscr")),
-        ("Prepayment Penalty",      fin_info.get("prepayment_penalty")),
-        ("Assumable",               str(fin_info.get("assumable")) if fin_info.get("assumable") is not None else None),
-        ("Recourse",                fin_info.get("recourse")),
-        ("Existing Debt",           _v(fin_info.get("existing_debt"),"$")),
-        ("Debt Contact",            fin_info.get("debt_contact")),
-        ("Notes",                   fin_info.get("notes")),
+        ("Offering Type",  fin_info.get("offering_type")),
+        ("Debt Contact",   fin_info.get("debt_contact")),
+        ("Notes",          fin_info.get("notes")),
     ]))
+
+    story.append(Spacer(1, 10))
+
+    nf  = fin_info.get("new_financing") or {}
+    asd = fin_info.get("assumable_debt") or {}
+
+    # Side-by-side two-column table for New Financing vs Assumable Debt
+    col_hdr_style = ParagraphStyle("fch", fontName="Helvetica-Bold", fontSize=9,
+                                   textColor=GOLD_L, leading=13)
+    key_style_fin = ParagraphStyle("fck", fontName="Helvetica", fontSize=8.5,
+                                   textColor=MID, leading=13)
+    val_style_fin = ParagraphStyle("fcv", fontName="Helvetica", fontSize=9,
+                                   textColor=DARK, leading=13, wordWrap="CJK")
+
+    def fin_cell(label, val):
+        return [Paragraph(label, key_style_fin), Paragraph(str(val) if val else "N/A", val_style_fin)]
+
+    new_rows = [
+        fin_cell("Loan Type",          nf.get("loan_type")),
+        fin_cell("Lender",             nf.get("lender")),
+        fin_cell("Loan Amount",        _v(nf.get("loan_amount"),"$")),
+        fin_cell("LTV",                f"{nf.get('loan_to_value') or 'N/A'}%"),
+        fin_cell("Interest Rate",      f"{nf.get('interest_rate') or 'N/A'}%"),
+        fin_cell("Rate Type",          nf.get("rate_type")),
+        fin_cell("Loan Term",          nf.get("loan_term_years")),
+        fin_cell("Amortization",       nf.get("amortization_years")),
+        fin_cell("Interest-Only",      nf.get("interest_only_period")),
+        fin_cell("DSCR",               nf.get("dscr")),
+        fin_cell("Recourse",           nf.get("recourse")),
+        fin_cell("Notes",              nf.get("notes")),
+    ]
+    asd_rows = [
+        fin_cell("Loan Type",          asd.get("loan_type")),
+        fin_cell("Lender",             asd.get("lender")),
+        fin_cell("Loan Amount",        _v(asd.get("loan_amount"),"$")),
+        fin_cell("LTV",                f"{asd.get('loan_to_value') or 'N/A'}%"),
+        fin_cell("Interest Rate",      f"{asd.get('interest_rate') or 'N/A'}%"),
+        fin_cell("Rate Type",          asd.get("rate_type")),
+        fin_cell("Loan Term",          asd.get("loan_term_years")),
+        fin_cell("Amortization",       asd.get("amortization_years")),
+        fin_cell("Origination Date",   asd.get("origination_date")),
+        fin_cell("Maturity Date",      asd.get("maturity_date")),
+        fin_cell("Monthly Payment",    _v(asd.get("monthly_payment"),"$")),
+        fin_cell("Annual Debt Svc",    _v(asd.get("annual_debt_service"),"$")),
+        fin_cell("DSCR",               asd.get("dscr")),
+        fin_cell("Prepayment Penalty", asd.get("prepayment_penalty")),
+        fin_cell("Recourse",           asd.get("recourse")),
+        fin_cell("Notes",              asd.get("notes")),
+    ]
+
+    # Pad shorter column so rows align
+    while len(new_rows) < len(asd_rows):
+        new_rows.append([Paragraph("", key_style_fin), Paragraph("", val_style_fin)])
+    while len(asd_rows) < len(new_rows):
+        asd_rows.append([Paragraph("", key_style_fin), Paragraph("", val_style_fin)])
+
+    # Build side-by-side table: [NF label | NF value | divider | ASD label | ASD value]
+    fin_hdr = [
+        Paragraph("NEW FINANCING", col_hdr_style),
+        Paragraph("", col_hdr_style),
+        Paragraph("", col_hdr_style),
+        Paragraph("ASSUMABLE DEBT", col_hdr_style),
+        Paragraph("", col_hdr_style),
+    ]
+    fin_data = [fin_hdr] + [
+        [nr[0], nr[1], Paragraph("", val_style_fin), ar[0], ar[1]]
+        for nr, ar in zip(new_rows, asd_rows)
+    ]
+    fin_tbl = Table(fin_data, colWidths=[1.3*inch, 2.15*inch, 0.1*inch, 1.3*inch, 2.15*inch])
+    fin_tbl.setStyle(TableStyle([
+        ("BACKGROUND",    (0,0), (1,0),  DARK),
+        ("BACKGROUND",    (3,0), (4,0),  DARK2),
+        ("BACKGROUND",    (2,0), (2,-1), colors.white),
+        ("ROWBACKGROUNDS",(0,1), (1,-1), [colors.white, ALT]),
+        ("ROWBACKGROUNDS",(3,1), (4,-1), [colors.white, ALT]),
+        ("GRID",          (0,0), (1,-1), 0.3, BORDER),
+        ("GRID",          (3,0), (4,-1), 0.3, BORDER),
+        ("LINEAFTER",     (2,0), (2,-1), 0,   colors.white),
+        ("TOPPADDING",    (0,0), (-1,-1), 5),
+        ("BOTTOMPADDING", (0,0), (-1,-1), 5),
+        ("LEFTPADDING",   (0,0), (-1,-1), 7),
+        ("RIGHTPADDING",  (0,0), (-1,-1), 7),
+        ("VALIGN",        (0,0), (-1,-1), "TOP"),
+    ]))
+    story.append(fin_tbl)
 
     # 3 — Investment Highlights
     story.append(PageBreak())
@@ -1587,28 +1667,52 @@ if st.button("🔍  Analyze Offering Memorandum", type="primary", use_container_
         repl_i = data.get("replacement_cost") or {}
 
         col1, col2 = st.columns(2)
+        st.markdown(f"**Offering Type:** {fin_i.get('offering_type') or 'N/A'}  &nbsp;|&nbsp;  **Debt Contact:** {fin_i.get('debt_contact') or 'N/A'}", unsafe_allow_html=True)
+        if fin_i.get("notes"):
+            st.markdown(f"*{fin_i['notes']}*")
+        st.markdown("")
+
+        nf_i  = fin_i.get("new_financing") or {}
+        asd_i = fin_i.get("assumable_debt") or {}
+
+        col1, col2 = st.columns(2)
         with col1:
-            st.markdown('<div class="gold-header">Financing Terms</div>', unsafe_allow_html=True)
+            st.markdown('<div class="gold-header">New Financing</div>', unsafe_allow_html=True)
             for label, val in [
-                ("Offering Type",      fin_i.get("offering_type")),
-                ("Loan Type",          fin_i.get("loan_type")),
-                ("Lender",             fin_i.get("lender")),
-                ("Loan Amount",        _v(fin_i.get("loan_amount"),"$")),
-                ("LTV",                f"{fin_i.get('loan_to_value') or 'N/A'}%"),
-                ("Interest Rate",      f"{fin_i.get('interest_rate') or 'N/A'}%"),
-                ("Rate Type",          fin_i.get("rate_type")),
-                ("Loan Term",          fin_i.get("loan_term_years")),
-                ("Amortization",       fin_i.get("amortization_years")),
-                ("Interest Only",      fin_i.get("interest_only_period")),
-                ("Origination Date",   fin_i.get("origination_date")),
-                ("Maturity Date",      fin_i.get("maturity_date")),
-                ("Monthly Payment",    _v(fin_i.get("monthly_payment"),"$")),
-                ("Annual Debt Service",_v(fin_i.get("annual_debt_service"),"$")),
-                ("DSCR",               fin_i.get("dscr")),
-                ("Prepayment Penalty", fin_i.get("prepayment_penalty")),
-                ("Assumable",          str(fin_i.get("assumable")) if fin_i.get("assumable") is not None else "N/A"),
-                ("Recourse",           fin_i.get("recourse")),
-                ("Existing Debt",      _v(fin_i.get("existing_debt"),"$")),
+                ("Loan Type",        nf_i.get("loan_type")),
+                ("Lender",           nf_i.get("lender")),
+                ("Loan Amount",      _v(nf_i.get("loan_amount"),"$")),
+                ("LTV",              f"{nf_i.get('loan_to_value') or 'N/A'}%"),
+                ("Interest Rate",    f"{nf_i.get('interest_rate') or 'N/A'}%"),
+                ("Rate Type",        nf_i.get("rate_type")),
+                ("Loan Term",        nf_i.get("loan_term_years")),
+                ("Amortization",     nf_i.get("amortization_years")),
+                ("Interest Only",    nf_i.get("interest_only_period")),
+                ("DSCR",             nf_i.get("dscr")),
+                ("Recourse",         nf_i.get("recourse")),
+                ("Notes",            nf_i.get("notes")),
+            ]:
+                st.markdown(f"**{label}:** {val or 'N/A'}")
+
+        with col2:
+            st.markdown('<div class="gold-header">Assumable Debt</div>', unsafe_allow_html=True)
+            for label, val in [
+                ("Loan Type",          asd_i.get("loan_type")),
+                ("Lender",             asd_i.get("lender")),
+                ("Loan Amount",        _v(asd_i.get("loan_amount"),"$")),
+                ("LTV",                f"{asd_i.get('loan_to_value') or 'N/A'}%"),
+                ("Interest Rate",      f"{asd_i.get('interest_rate') or 'N/A'}%"),
+                ("Rate Type",          asd_i.get("rate_type")),
+                ("Loan Term",          asd_i.get("loan_term_years")),
+                ("Amortization",       asd_i.get("amortization_years")),
+                ("Origination Date",   asd_i.get("origination_date")),
+                ("Maturity Date",      asd_i.get("maturity_date")),
+                ("Monthly Payment",    _v(asd_i.get("monthly_payment"),"$")),
+                ("Annual Debt Svc",    _v(asd_i.get("annual_debt_service"),"$")),
+                ("DSCR",               asd_i.get("dscr")),
+                ("Prepayment Penalty", asd_i.get("prepayment_penalty")),
+                ("Recourse",           asd_i.get("recourse")),
+                ("Notes",              asd_i.get("notes")),
             ]:
                 st.markdown(f"**{label}:** {val or 'N/A'}")
 
