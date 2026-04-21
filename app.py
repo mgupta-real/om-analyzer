@@ -790,10 +790,11 @@ def build_pdf(d: dict, filename: str) -> bytes:
     ]
 
     # Pad shorter column so rows align
+    spacer_cell = Paragraph(" ", val_style_fin)
     while len(new_rows) < len(asd_rows):
-        new_rows.append([Paragraph("", key_style_fin), Paragraph("", val_style_fin)])
+        new_rows.append([Paragraph(" ", key_style_fin), spacer_cell])
     while len(asd_rows) < len(new_rows):
-        asd_rows.append([Paragraph("", key_style_fin), Paragraph("", val_style_fin)])
+        asd_rows.append([Paragraph(" ", key_style_fin), spacer_cell])
 
     # Build side-by-side table: [NF label | NF value | divider | ASD label | ASD value]
     fin_hdr = [
@@ -807,7 +808,7 @@ def build_pdf(d: dict, filename: str) -> bytes:
         [nr[0], nr[1], Paragraph("", val_style_fin), ar[0], ar[1]]
         for nr, ar in zip(new_rows, asd_rows)
     ]
-    fin_tbl = Table(fin_data, colWidths=[1.3*inch, 2.15*inch, 0.1*inch, 1.3*inch, 2.15*inch])
+    fin_tbl = Table(fin_data, colWidths=[1.3*inch, 2.1*inch, 0.2*inch, 1.3*inch, 2.1*inch], repeatRows=1)
     fin_tbl.setStyle(TableStyle([
         ("BACKGROUND",    (0,0), (1,0),  DARK),
         ("BACKGROUND",    (3,0), (4,0),  DARK2),
