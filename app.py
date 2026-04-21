@@ -597,6 +597,19 @@ class XLWriter:
         self.row = 1
         self.ws.sheet_view.showGridLines = False
 
+    @staticmethod
+    def _auto_height(text, col_width, font_size=9, min_h=15, padding=6):
+        """Estimate row height needed to display text without clipping."""
+        if not text:
+            return min_h
+        chars_per_line = max(1, int(col_width * 1.3))
+        text_str = str(text)
+        lines = 0
+        for segment in text_str.split("\n"):
+            lines += max(1, -(-len(segment) // chars_per_line))
+        line_height = font_size * 1.4
+        return max(min_h, int(lines * line_height) + padding)
+
     def _set(self, cell, value, bold=False, bg=None, fg=C_DARK, size=10,
              align_h="left", wrap=True, italic=False, border=True, num_fmt=None):
         c = self.ws[cell]
@@ -610,31 +623,42 @@ class XLWriter:
         if num_fmt:
             c.number_format = num_fmt
 
+    def _fill_row(self, bg, col_start=1, col_end=13):
+        """Fill background across a full row without merging."""
+        for i in range(col_start, col_end + 1):
+            col = get_column_letter(i)
+            c = self.ws[f"{col}{self.row}"]
+            c.fill = _fill(bg)
+
     def section(self, title):
-        """Dark gold section header spanning cols A–H."""
+        """Dark gold section header — title in col A, background fills A–M."""
         self.row += 1
-        self.ws.merge_cells(f"A{self.row}:H{self.row}")
+        self._fill_row(C_DARK)
         self._set(f"A{self.row}", title, bold=True, bg=C_DARK, fg=C_GOLD_L,
                   size=11, border=False)
-        self.ws.row_dimensions[self.row].height = 22
+        self.ws.row_dimensions[self.row].height = 24
         self.row += 1
 
     def subsection(self, title):
         """Gold-tinted subsection label."""
-        self.ws.merge_cells(f"A{self.row}:H{self.row}")
+        self._fill_row(C_GOLD_P)
         self._set(f"A{self.row}", title, bold=True, bg=C_GOLD_P, fg=C_DARK,
                   size=10, border=False)
-        self.ws.row_dimensions[self.row].height = 18
+        self.ws.row_dimensions[self.row].height = 20
         self.row += 1
 
     def kv(self, label, value, alt=False):
-        """Key-value row: col A = label, col B–H = value."""
+        """Key-value row: col A = label, col B = value (no merge)."""
         bg = C_ALT if alt else C_WHITE
+        val_str = str(value) if value else "N/A"
         self._set(f"A{self.row}", label, fg=C_MID, bg=bg, size=9)
-        self.ws.merge_cells(f"B{self.row}:H{self.row}")
-        self._set(f"B{self.row}", str(value) if value else "N/A",
-                  bg=bg, size=9, wrap=True)
-        self.ws.row_dimensions[self.row].height = 15
+        self._set(f"B{self.row}", val_str, bg=bg, size=9, wrap=True)
+        # Fill remaining columns with same background
+        for col in ["C","D","E","F","G","H","I","J","K","L","M"]:
+            c = self.ws[f"{col}{self.row}"]
+            c.fill = _fill(bg)
+        h = self._auto_height(val_str, col_width=40)
+        self.ws.row_dimensions[self.row].height = h
         self.row += 1
 
     def blank(self, n=1):
@@ -646,43 +670,63 @@ class XLWriter:
             col = get_column_letter(col_start + i)
             self._set(f"{col}{self.row}", h, bold=True, bg=C_DARK,
                       fg=C_GOLD_L, size=9, align_h="center")
-        self.ws.row_dimensions[self.row].height = 16
+        self.ws.row_dimensions[self.row].height = 18
         self.row += 1
 
-    def table_row(self, values, col_start=1, alt=False):
-        """Write a data row for a table."""
+    def table_row(self, values, col_start=1, alt=False, col_widths=None):
+        """Write a data row; auto-size height based on longest cell."""
         bg = C_ALT if alt else C_WHITE
+        col_widths = col_widths or []
+        max_h = 15
         for i, v in enumerate(values):
             col = get_column_letter(col_start + i)
-            self._set(f"{col}{self.row}", str(v) if v is not None else "—",
-                      bg=bg, size=9, wrap=True)
-        self.ws.row_dimensions[self.row].height = 15
+            val_str = str(v) if v is not None else "—"
+            self._set(f"{col}{self.row}", val_str, bg=bg, size=9, wrap=True)
+            cw = col_widths[i] if i < len(col_widths) else 16
+            max_h = max(max_h, self._auto_height(val_str, col_width=cw))
+        self.ws.row_dimensions[self.row].height = max_h
         self.row += 1
 
     def side_by_side_headers(self, left_title, right_title):
-        """Two dark headers side by side (cols A–D left, F–I right)."""
-        self.ws.merge_cells(f"A{self.row}:D{self.row}")
+        """Two dark headers side by side — left in A, right in F."""
+        self._fill_row(C_DARK)
         self._set(f"A{self.row}", left_title, bold=True, bg=C_DARK,
                   fg=C_GOLD_L, size=10, border=False)
-        self.ws.merge_cells(f"F{self.row}:I{self.row}")
         self._set(f"F{self.row}", right_title, bold=True, bg=C_DARK2,
                   fg=C_GOLD_L, size=10, border=False)
+        # Dark2 for right side cols F-I
+        for col in ["G","H","I"]:
+            self.ws[f"{col}{self.row}"].fill = _fill(C_DARK2)
+        self.ws.row_dimensions[self.row].height = 20
         self.row += 1
 
     def side_by_side_kv(self, left_label, left_val, right_label, right_val, alt=False):
         bg = C_ALT if alt else C_WHITE
+        lv = str(left_val) if left_val else "N/A"
+        rv = str(right_val) if right_val else "N/A"
         self._set(f"A{self.row}", left_label, fg=C_MID, bg=bg, size=9)
-        self.ws.merge_cells(f"B{self.row}:D{self.row}")
-        self._set(f"B{self.row}", str(left_val) if left_val else "N/A", bg=bg, size=9)
+        self._set(f"B{self.row}", lv, bg=bg, size=9, wrap=True)
+        # Fill C-E with bg
+        for col in ["C","D","E"]:
+            self.ws[f"{col}{self.row}"].fill = _fill(bg)
         self._set(f"F{self.row}", right_label, fg=C_MID, bg=bg, size=9)
-        self.ws.merge_cells(f"G{self.row}:I{self.row}")
-        self._set(f"G{self.row}", str(right_val) if right_val else "N/A", bg=bg, size=9)
-        self.ws.row_dimensions[self.row].height = 15
+        self._set(f"G{self.row}", rv, bg=bg, size=9, wrap=True)
+        # Fill H-I with bg
+        for col in ["H","I"]:
+            self.ws[f"{col}{self.row}"].fill = _fill(bg)
+        h = max(
+            self._auto_height(lv, col_width=40),
+            self._auto_height(rv, col_width=40),
+            15
+        )
+        self.ws.row_dimensions[self.row].height = h
         self.row += 1
 
     def set_col_widths(self, widths):
         for col_letter, w in widths.items():
             self.ws.column_dimensions[col_letter].width = w
+
+
 
 
 def build_excel(d: dict, filename: str) -> bytes:
@@ -717,31 +761,31 @@ def build_excel(d: dict, filename: str) -> bytes:
 
     addr = f"{pd_.get('address','')}, {pd_.get('city','')}, {pd_.get('state','')} {pd_.get('zip','')}".strip(", ")
 
-    # Set column widths for single sheet (wide enough for all sections)
+    # Set column widths for single sheet
     xl.set_col_widths({
-        "A": 30, "B": 18, "C": 14, "D": 14,
-        "E": 4,  "F": 30, "G": 18, "H": 14, "I": 14,
-        "J": 14, "K": 14, "L": 14, "M": 14,
+        "A": 32, "B": 40, "C": 16, "D": 16,
+        "E": 4,  "F": 32, "G": 40, "H": 16,
+        "I": 16, "J": 16, "K": 16, "L": 16, "M": 16,
     })
 
     # ── Cover rows ────────────────────────────────────────────────────────────
-    ws.merge_cells("A1:M1")
+    xl._fill_row(C_DARK)
     xl._set("A1", "MULTIFAMILY UNDERWRITING REPORT",
             bold=True, bg=C_DARK, fg=C_GOLD_L, size=12,
-            align_h="center", border=False)
+            align_h="left", border=False)
     ws.row_dimensions[1].height = 24
     xl.row = 2
-    ws.merge_cells(f"A2:M2")
+    xl._fill_row(C_DARK)
     xl._set("A2", prop, bold=True, bg=C_DARK, fg=C_WHITE,
-            size=20, align_h="center", border=False)
-    ws.row_dimensions[2].height = 40
+            size=16, align_h="left", border=False)
+    ws.row_dimensions[2].height = 36
     xl.row = 3
-    ws.merge_cells("A3:M3")
+    xl._fill_row(C_DARK2)
     xl._set("A3",
         f"Address: {addr}   ·   Broker: {broker_d.get('name','N/A')}   ·   "
         f"Units: {_v(pd_.get('units'),'n')}   ·   Year Built: {_v(pd_.get('year_built'))}   ·   "
         f"Report: {date}   ·   Source: {filename}",
-        bg=C_DARK2, fg=C_GOLD_L, size=9, align_h="center", border=False)
+        bg=C_DARK2, fg=C_GOLD_L, size=9, align_h="left", border=False, wrap=True)
     ws.row_dimensions[3].height = 18
     xl.row = 4
 
@@ -1153,8 +1197,8 @@ def build_excel(d: dict, filename: str) -> bytes:
             ("INCOME",   inc_lines, True),
             ("EXPENSES", exp_lines, True),
         ]:
-            # Section label row
-            xl.ws.merge_cells(f"A{xl.row}:{get_column_letter(2+len(p_all))}{xl.row}")
+            # Section label row — fill full row, title in col A
+            xl._fill_row(C_GOLD_P)
             xl._set(f"A{xl.row}", label, bold=True, bg=C_GOLD_P, fg=C_DARK, size=9)
             xl.row += 1
             for i, item in enumerate(lines_list):
@@ -1209,10 +1253,13 @@ def build_excel(d: dict, filename: str) -> bytes:
         for f in flags:
             cat = f.get("category","Info")
             bg  = flag_bg.get(cat, C_BLUE)
-            for j, v in enumerate([cat, f.get("title",""), f.get("detail","")]):
+            detail = f.get("detail","")
+            for j, v in enumerate([cat, f.get("title",""), detail]):
                 col = get_column_letter(1 + j)
                 xl._set(f"{col}{xl.row}", v, bg=bg, size=9, bold=(j == 0), wrap=True)
-            xl.ws.row_dimensions[xl.row].height = 30
+            # Auto height based on detail text in col C (~50 chars wide)
+            h = max(20, xl._auto_height(detail, col_width=50))
+            xl.ws.row_dimensions[xl.row].height = h
             xl.row += 1
     else:
         xl.kv("Note", "No flags generated.")
@@ -1252,11 +1299,12 @@ def build_excel(d: dict, filename: str) -> bytes:
 
     # ── Disclaimer ────────────────────────────────────────────────────────────
     xl.blank()
-    xl.ws.merge_cells(f"A{xl.row}:M{xl.row}")
+    xl._fill_row(C_ALT)
     xl._set(f"A{xl.row}",
         "DISCLAIMER: AI-generated from the uploaded OM. For internal underwriting reference only. "
         "Verify all figures independently. Powered by Anthropic Claude.",
-        bg=C_ALT, fg=C_MID, size=8, italic=True, border=False)
+        bg=C_ALT, fg=C_MID, size=8, italic=True, border=False, wrap=True)
+    xl.ws.row_dimensions[xl.row].height = 20
 
     buf = io.BytesIO()
     wb.save(buf)
