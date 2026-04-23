@@ -457,7 +457,7 @@ def analyze_om(pdf_text: str, api_key: str, progress_cb=None) -> dict:
         progress_cb("Sending to Claude AI for analysis...")
 
     resp = client.messages.create(
-        model="claude-opus-4-5",
+        model="claude-haiku-4-5-20251001",
         max_tokens=16000,          # raised from 8000 — gives Claude enough room to finish the JSON
         system=SYSTEM,
         messages=[{"role": "user", "content": f"Analyze this OM:\n\n{text}"}]
