@@ -458,7 +458,7 @@ def analyze_om(pdf_text: str, api_key: str, progress_cb=None) -> dict:
 
     resp = client.messages.create(
         model="claude-haiku-4-5-20251001",
-        max_tokens=16000,          # raised from 8000 — gives Claude enough room to finish the JSON
+        max_tokens=24000,          # raised from 8000 — gives Claude enough room to finish the JSON
         system=SYSTEM,
         messages=[{"role": "user", "content": f"Analyze this OM:\n\n{text}"}]
     )
@@ -470,7 +470,7 @@ def analyze_om(pdf_text: str, api_key: str, progress_cb=None) -> dict:
     if progress_cb:
         progress_cb("Parsing extracted data...")
 
-    # Attempt 1 — clean parse
+ # Attempt 1 — clean parse
     try:
         return json.loads(raw)
     except json.JSONDecodeError:
@@ -484,13 +484,50 @@ def analyze_om(pdf_text: str, api_key: str, progress_cb=None) -> dict:
     except json.JSONDecodeError:
         pass
 
-    # Attempt 3 — response was still truncated; close open structures and retry
+    # Attempt 3 — try to fix truncated JSON
     try:
         fixed = _fix_truncated_json(raw)
         return json.loads(fixed)
     except Exception:
-        raise ValueError("Could not parse AI response. Please try again — this occasionally happens with very large OMs.")
+        pass
 
+    # ── Pass 2 — ask Claude to complete the truncated JSON ───────────────────
+    if progress_cb:
+        progress_cb("Response was truncated — requesting completion...")
+    try:
+        resp2 = client.messages.create(
+            model="claude-opus-4-5",
+            max_tokens=16000,
+            system="You are a JSON completion assistant. The user will give you a truncated JSON object. Complete it so it is valid JSON. Output ONLY the completed JSON with no explanation, no markdown fences.",
+            messages=[
+                {"role": "user", "content": (
+                    f"This JSON was truncated mid-response. Please complete it to make it valid JSON. "
+                    f"Continue from exactly where it left off and close all open structures:\n\n{raw}"
+                )}
+            ]
+        )
+        raw2 = resp2.content[0].text.strip()
+        raw2 = re.sub(r"^```[a-z]*\n?", "", raw2).rstrip("`").strip()
+
+        combined = raw + raw2
+        try:
+            return json.loads(combined)
+        except json.JSONDecodeError:
+            pass
+
+        try:
+            return json.loads(raw2)
+        except json.JSONDecodeError:
+            pass
+
+        fixed2 = _fix_truncated_json(combined)
+        return json.loads(fixed2)
+
+    except Exception:
+        raise ValueError(
+            "Could not parse AI response after two attempts. "
+            "Try uploading a smaller OM or one with fewer pages."
+        )
 
 def _fix_truncated_json(raw: str) -> str:
     """Close any open strings, arrays and objects left by a truncated JSON response."""
