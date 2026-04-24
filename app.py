@@ -456,7 +456,7 @@ def analyze_om(pdf_text: str, api_key: str, progress_cb=None) -> dict:
     if progress_cb:
         progress_cb("Sending to Claude AI for analysis...")
 
-   raw = ""
+raw = ""
     with client.messages.stream(
         model="claude-haiku-4-5-20251001",
         max_tokens=32000,
