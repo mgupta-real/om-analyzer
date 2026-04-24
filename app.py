@@ -456,7 +456,7 @@ def analyze_om(pdf_text: str, api_key: str, progress_cb=None) -> dict:
     if progress_cb:
         progress_cb("Sending to Claude AI for analysis...")
 
-raw = ""
+    raw = ""
     with client.messages.stream(
         model="claude-haiku-4-5-20251001",
         max_tokens=32000,
@@ -466,9 +466,6 @@ raw = ""
         for text_chunk in stream.text_stream:
             raw += text_chunk
     raw = raw.strip()
-
-    raw = resp.content[0].text.strip()
-    # Strip any accidental markdown fences
     raw = re.sub(r"^```[a-z]*\n?", "", raw).rstrip("`").strip()
 
     if progress_cb:
