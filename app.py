@@ -358,16 +358,16 @@ CRITICAL EXTRACTION RULES:
 
 def analyze_om(pdf_text: str, api_key: str, progress_cb=None) -> dict:
     client = anthropic.Anthropic(api_key=api_key)
-    MAX = 140_000
+    MAX = 180_000
     text = pdf_text[:MAX]
     if len(pdf_text) > MAX and progress_cb:
-        progress_cb("Large OM — using first 140K characters")
+        progress_cb("Large OM — using first 180K characters")
     if progress_cb:
         progress_cb("Sending to Claude AI for analysis...")
     raw = ""
     with client.messages.stream(
         model="claude-haiku-4-5-20251001",
-        max_tokens=32000,
+        max_tokens=64000,
         system=SYSTEM,
         messages=[{"role": "user", "content": f"Analyze this OM:\n\n{text}"}]
     ) as stream:
@@ -392,12 +392,12 @@ def analyze_om(pdf_text: str, api_key: str, progress_cb=None) -> dict:
     except Exception:
         pass
     if progress_cb:
-        progress_cb("Response truncated — requesting completion...")
+        progress_cb("Response truncated — retrying completion with Haiku...")
     try:
         resp2 = client.messages.create(
-            model="claude-opus-4-5",
-            max_tokens=16000,
-            system="You are a JSON completion assistant. Complete the truncated JSON. Output ONLY valid JSON.",
+            model="claude-haiku-4-5-20251001",
+            max_tokens=32000,
+            system="You are a JSON completion assistant. Complete the truncated JSON so it is valid. Output ONLY valid JSON, nothing else.",
             messages=[{"role": "user", "content": f"Complete this truncated JSON:\n\n{raw}"}]
         )
         raw2 = re.sub(r"^```[a-z]*\n?", "", resp2.content[0].text.strip()).rstrip("`").strip()
