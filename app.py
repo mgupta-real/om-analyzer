@@ -357,58 +357,80 @@ CRITICAL EXTRACTION RULES:
 
 
 def analyze_om(pdf_text: str, api_key: str, progress_cb=None) -> dict:
-    client = anthropic.Anthropic(api_key=api_key)
+    import httpx
+
     MAX = 180_000
     text = pdf_text[:MAX]
     if len(pdf_text) > MAX and progress_cb:
         progress_cb("Large OM — using first 180K characters")
     if progress_cb:
         progress_cb("Sending to Claude AI for analysis...")
-    raw = ""
-    with client.messages.stream(
-        model="claude-haiku-4-5-20251001",
-        max_tokens=64000,
-        system=SYSTEM,
-        messages=[{"role": "user", "content": f"Analyze this OM:\n\n{text}"}]
-    ) as stream:
-        for chunk in stream.text_stream:
-            raw += chunk
-    raw = raw.strip()
-    raw = re.sub(r"^```[a-z]*\n?", "", raw).rstrip("`").strip()
+
+    # Use non-streaming with a long timeout — streaming drops connection on large OMs
+    client = anthropic.Anthropic(
+        api_key=api_key,
+        http_client=httpx.Client(timeout=httpx.Timeout(600.0, connect=30.0))
+    )
+
+    def _call(prompt_text, max_tok, system_text):
+        resp = client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=max_tok,
+            system=system_text,
+            messages=[{"role": "user", "content": prompt_text}]
+        )
+        raw = resp.content[0].text.strip()
+        raw = re.sub(r"^```[a-z]*\n?", "", raw).rstrip("`").strip()
+        return raw, resp.stop_reason
+
+    def _parse(raw):
+        # Attempt 1: direct parse
+        try:
+            return json.loads(raw)
+        except json.JSONDecodeError:
+            pass
+        # Attempt 2: extract outermost JSON object
+        try:
+            m = re.search(r"\{.*\}", raw, re.DOTALL)
+            if m:
+                return json.loads(m.group())
+        except json.JSONDecodeError:
+            pass
+        # Attempt 3: fix truncated JSON
+        try:
+            return json.loads(_fix_truncated_json(raw))
+        except Exception:
+            pass
+        return None
+
+    # ── Primary call ──────────────────────────────────────────────────────────
+    raw, stop_reason = _call(
+        f"Analyze this OM:\n\n{text}",
+        max_tok=32000,
+        system_text=SYSTEM
+    )
     if progress_cb:
         progress_cb("Parsing extracted data...")
-    try:
-        return json.loads(raw)
-    except json.JSONDecodeError:
-        pass
-    try:
-        m = re.search(r"\{.*\}", raw, re.DOTALL)
-        if m:
-            return json.loads(m.group())
-    except json.JSONDecodeError:
-        pass
-    try:
-        return json.loads(_fix_truncated_json(raw))
-    except Exception:
-        pass
-    if progress_cb:
-        progress_cb("Response truncated — retrying completion with Haiku...")
-    try:
-        resp2 = client.messages.create(
-            model="claude-haiku-4-5-20251001",
-            max_tokens=32000,
-            system="You are a JSON completion assistant. Complete the truncated JSON so it is valid. Output ONLY valid JSON, nothing else.",
-            messages=[{"role": "user", "content": f"Complete this truncated JSON:\n\n{raw}"}]
+
+    result = _parse(raw)
+    if result is not None:
+        return result
+
+    # ── Truncation recovery: ask Haiku to complete the broken JSON ────────────
+    if stop_reason == "max_tokens" or len(raw) > 100:
+        if progress_cb:
+            progress_cb("Response truncated — retrying completion...")
+        raw2, _ = _call(
+            f"Complete this truncated JSON so it is fully valid. Output ONLY the completed JSON:\n\n{raw}",
+            max_tok=16000,
+            system_text="You are a JSON completion assistant. Output ONLY valid JSON, nothing else."
         )
-        raw2 = re.sub(r"^```[a-z]*\n?", "", resp2.content[0].text.strip()).rstrip("`").strip()
         for candidate in [raw + raw2, raw2]:
-            try:
-                return json.loads(candidate)
-            except Exception:
-                pass
-        return json.loads(_fix_truncated_json(raw + raw2))
-    except Exception:
-        raise ValueError("Could not parse AI response. Try a smaller OM.")
+            result = _parse(candidate)
+            if result is not None:
+                return result
+
+    raise ValueError("Could not parse AI response. Try uploading a smaller OM or check your API key.")
 
 
 def _fix_truncated_json(raw: str) -> str:
