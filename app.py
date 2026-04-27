@@ -389,22 +389,9 @@ Here is the full text of the Offering Memorandum:
 """
 
 
-def analyze_om_with_claude(om_text: str, api_key: str, model: str = "claude-sonnet-4-20250514") -> dict:
-    """Send OM text to Claude and return parsed JSON."""
+def _call_claude(prompt: str, api_key: str, model: str, max_tokens: int) -> str:
+    """Raw Claude API call — returns response text and stop_reason."""
     import requests as req
-    import json
-
-    # Truncate to ~180k chars to stay within context limits
-    truncated = om_text[:180000]
-
-    prompt = EXTRACTION_PROMPT.replace("{OM_TEXT}", truncated)
-
-    payload = {
-        "model": model,
-        "max_tokens": 8000,
-        "messages": [{"role": "user", "content": prompt}]
-    }
-
     resp = req.post(
         "https://api.anthropic.com/v1/messages",
         headers={
@@ -412,22 +399,135 @@ def analyze_om_with_claude(om_text: str, api_key: str, model: str = "claude-sonn
             "anthropic-version": "2023-06-01",
             "content-type": "application/json",
         },
-        json=payload,
-        timeout=180,
+        json={
+            "model": model,
+            "max_tokens": max_tokens,
+            "messages": [{"role": "user", "content": prompt}],
+        },
+        timeout=240,
     )
     resp.raise_for_status()
+    body = resp.json()
+    text = body["content"][0]["text"].strip()
+    stop_reason = body.get("stop_reason", "")
+    return text, stop_reason
 
-    raw = resp.json()["content"][0]["text"].strip()
 
-    # Strip any markdown fences Claude may have added
+def _clean_json(raw: str) -> str:
+    """Strip markdown fences and return clean JSON string."""
     if raw.startswith("```"):
-        raw = raw.split("```")[1]
+        parts = raw.split("```")
+        raw = parts[1] if len(parts) > 1 else raw
         if raw.startswith("json"):
             raw = raw[4:]
     if raw.endswith("```"):
         raw = raw[:-3]
+    return raw.strip()
 
-    return json.loads(raw.strip())
+
+# Slimmer fallback prompt used when the full schema overflows max_tokens
+SLIM_PROMPT = """
+You are a multifamily underwriter. Extract key data from this Offering Memorandum.
+Return ONLY valid JSON. No markdown, no preamble. Use null for missing fields.
+Dollar amounts as numbers only. Percentages as decimals (0.065 = 6.5%).
+sale_comps should be [] if not present (never null).
+
+{
+  "property": {"name":null,"address":null,"city":null,"state":null,"zip":null,
+    "year_built":null,"num_units":null,"num_buildings":null,"site_acres":null,
+    "avg_unit_sf":null,"total_rentable_sf":null,"building_type":null,
+    "foundation":null,"framing":null,"exterior":null,"roof":null,
+    "heating_cooling":null,"electric":null,"parking_spaces":null,
+    "parking_ratio":null,"school_district":null,"schools":[],"broker":null},
+  "offering": {"price":null,"price_per_unit":null,"cap_rate":null,"terms":null},
+  "loan_assumption": {"available":false,"lender":null,"current_balance":null,
+    "note_rate":null,"rate_type":null,"maturity_date":null,"io_periods_months":null},
+  "investment_highlights": {"summary":null,"key_bullets":[]},
+  "renovation": {"phases":[],"remaining_upside_units":null},
+  "value_add_levers": [],
+  "demographics": {"workforce_within_5mi":null,"businesses_within_5mi":null,
+    "median_hh_income_5mi":null,"median_age_3mi":null,"traffic_count_vpd":null,
+    "traffic_road":null,"five_yr_avg_rent_growth":null,"five_yr_avg_occupancy":null,
+    "nearby_employers":[]},
+  "unit_mix": [{"type_code":null,"description":null,"num_units":null,"unit_sf":null,
+    "rent_inplace":null,"rent_market":null,"rent_comp_supported":null,
+    "gpr_inplace":null}],
+  "utilities": {"electricity_billing":null,"water_billing":null,"gas_billing":null,
+    "trash_billing":null,"trash_flat_fee":null,"pest_flat_fee":null,"cable_internet":null},
+  "amenities": {"unit_features":[],"community_features":[],"pet_policy":null,
+    "pet_rent":null,"pet_deposit":null},
+  "on_site_staff": {"total_employees":null,"roles":[]},
+  "rent_comps": {
+    "summary": [{"map_num":null,"name":null,"year_built":null,"num_units":null,
+      "avg_unit_sf":null,"occupancy":null,"avg_rent_per_unit":null,"avg_rent_psf":null}],
+    "subject_vs_comp_avg": {"subject_avg_rent":null,"comp_avg_rent":null,
+      "discount_per_unit":null},
+    "detail_by_comp": []},
+  "financial": {
+    "noi_snapshots": [{"period":null,"gross_potential_rent":null,"net_rental_income":null,
+      "gross_revenues":null,"total_expenses":null,"noi":null,
+      "physical_occupancy":null,"economic_occupancy":null}],
+    "proforma_years": [{"year":null,"gpr":null,"gross_revenues":null,
+      "total_expenses":null,"noi":null}],
+    "key_expense_assumptions": {"management_fee_pct":null,"insurance_per_unit":null,
+      "real_estate_tax_rate":null,"capex_reserve_per_unit":null},
+    "historical_capex_total":null,"historical_capex_breakdown":[]},
+  "sale_comps": [],
+  "market_overview": {"metro":null,"metro_population":null,"metro_job_growth_pct":null,
+    "sub_occupancy":null,"sub_rent":null,"pipeline_units":null},
+  "underwriting_flags": [{"category":null,"title":null,"detail":null}]
+}
+
+Offering Memorandum text:
+{OM_TEXT}
+"""
+
+
+def analyze_om_with_claude(om_text: str, api_key: str, model: str = "claude-sonnet-4-20250514") -> dict:
+    """Send OM text to Claude and return parsed JSON.
+
+    Strategy:
+      1. Try full schema with max_tokens=16000.
+      2. If stop_reason=='max_tokens' (truncated output) or JSON parse fails,
+         retry with slim schema at max_tokens=8000.
+      3. If slim also fails, attempt to salvage partial JSON via a repair call.
+    """
+    import json
+
+    # Truncate input to ~160k chars — leaves plenty of room for output tokens
+    truncated = om_text[:160000]
+
+    # ── Attempt 1: full schema ──────────────────────────────────────────────
+    prompt_full = EXTRACTION_PROMPT.replace("{OM_TEXT}", truncated)
+    raw, stop_reason = _call_claude(prompt_full, api_key, model, max_tokens=32000)
+
+    if stop_reason != "max_tokens":
+        try:
+            return json.loads(_clean_json(raw))
+        except json.JSONDecodeError:
+            pass  # fall through to retry
+
+    # ── Attempt 2: slim schema (shorter output) ────────────────────────────
+    prompt_slim = SLIM_PROMPT.replace("{OM_TEXT}", truncated)
+    raw2, stop_reason2 = _call_claude(prompt_slim, api_key, model, max_tokens=8000)
+
+    if stop_reason2 != "max_tokens":
+        try:
+            return json.loads(_clean_json(raw2))
+        except json.JSONDecodeError:
+            pass
+
+    # ── Attempt 3: repair the truncated JSON ──────────────────────────────
+    # Ask Claude to complete/fix the broken JSON
+    broken = raw2 if stop_reason2 == "max_tokens" else raw
+    repair_prompt = (
+        "The following JSON is incomplete or malformed because it was cut off. "
+        "Please complete and fix it so it is valid JSON. "
+        "Return ONLY the corrected JSON with no markdown or explanation.\n\n"
+        + broken[:12000]
+    )
+    raw3, _ = _call_claude(repair_prompt, api_key, model, max_tokens=6000)
+    return json.loads(_clean_json(raw3))
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -1054,7 +1154,7 @@ if uploaded:
                 st.error(f"PDF extraction failed: {e}")
                 st.stop()
 
-        with st.spinner("Analyzing with Claude AI (this takes 30–90 seconds)…"):
+        with st.spinner("Analyzing with Claude AI (30–90 sec — auto-retries if output is large)…"):
             try:
                 result = analyze_om_with_claude(om_text, api_key)
             except Exception as e:
