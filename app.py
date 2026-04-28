@@ -23,19 +23,19 @@ html, body, [class*="css"], .stApp, .main {
 section[data-testid="stSidebar"] { display: none !important; }
 .rv-navbar {
     background: #0B1929; border-bottom: 1px solid #1E3148;
-    padding: 0 40px; height: 96px;
+    padding: 0 48px; height: 110px;
     display: flex; align-items: center; justify-content: space-between;
     position: sticky; top: 0; z-index: 999;
 }
-.rv-logo-block { display: flex; align-items: center; gap: 18px; }
+.rv-logo-block { display: flex; align-items: center; gap: 20px; }
 .rv-logo-icon {
-    width: 66px; height: 66px; background: #1DC9A4; border-radius: 16px;
+    width: 72px; height: 72px; background: #1DC9A4; border-radius: 18px;
     display: flex; align-items: center; justify-content: center;
-    font-weight: 800; font-size: 22px; color: #0D1B2A; flex-shrink: 0;
+    font-weight: 800; font-size: 24px; color: #0D1B2A; flex-shrink: 0;
 }
 .rv-logo-text { display: flex; flex-direction: column; }
-.rv-logo-title { font-size: 28px; font-weight: 700; color: #FFFFFF; line-height: 1.2; }
-.rv-logo-sub { font-size: 11px; font-weight: 500; color: #5A8FAA; letter-spacing: 0.12em; text-transform: uppercase; margin-top: 5px; }
+.rv-logo-title { font-size: 32px; font-weight: 700; color: #FFFFFF; line-height: 1.2; }
+.rv-logo-sub { font-size: 12px; font-weight: 500; color: #5A8FAA; letter-spacing: 0.12em; text-transform: uppercase; margin-top: 6px; }
 .rv-nav-right { display: flex; align-items: center; gap: 20px; }
 .rv-version { font-size: 12px; color: #3A5A70; }
 .rv-claude-badge {
@@ -93,18 +93,37 @@ section[data-testid="stSidebar"] { display: none !important; }
 .rv-success-text { font-size: 14px; color: #C0D0E0; }
 .rv-success-text b { color: #1DC9A4; }
 
-/* File uploader — fully dark, no white */
+/* File uploader wrapper — align with card above */
+div[data-testid="stFileUploaderDropzoneInput"],
+.stFileUploader {
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+}
 .stFileUploader > div,
 .stFileUploader > div > div,
 [data-testid="stFileUploadDropzone"] {
     background: #0B1E30 !important;
     border: 1.5px dashed #2A5070 !important;
     border-radius: 12px !important;
-    padding: 20px 28px !important;
+    padding: 22px 32px !important;
+    margin: 0 !important;
 }
 .stFileUploader * { color: #6A9AB8 !important; background: transparent !important; }
-.stFileUploader small, .stFileUploader span { color: #2A4860 !important; }
+.stFileUploader small, .stFileUploader span { color: #3A6080 !important; }
 [data-testid="stFileUploadDropzone"] > div { background: transparent !important; border: none !important; }
+/* Upload Browse button — white background */
+[data-testid="stFileUploaderDropzone"] button,
+.stFileUploader button {
+    background: #FFFFFF !important;
+    color: #0D1B2A !important;
+    border: none !important;
+    border-radius: 6px !important;
+    font-weight: 600 !important;
+    font-size: 13px !important;
+    padding: 6px 16px !important;
+}
+[data-testid="stFileUploaderDropzone"] button span,
+.stFileUploader button span { color: #0D1B2A !important; }
 .stButton > button {
     background: #1DC9A4 !important; color: #0D1B2A !important; border: none !important;
     border-radius: 8px !important; font-weight: 700 !important; font-size: 15px !important;
@@ -1526,7 +1545,10 @@ with main_col:
         st.stop()
     os.environ["ANTHROPIC_API_KEY"] = api_key
 
-    uploaded = st.file_uploader("Drop your OM PDF here", type=["pdf"], label_visibility="collapsed")
+    # Pad the uploader to align with the upload card above
+    _gap, _upload_col = st.columns([0.058, 0.942])
+    with _upload_col:
+        uploaded = st.file_uploader("Drop your OM PDF here", type=["pdf"], label_visibility="collapsed")
 
     if uploaded is None:
         st.markdown("""
