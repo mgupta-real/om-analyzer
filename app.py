@@ -7,39 +7,122 @@ from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
 
-# ── Page setup ────────────────────────────────────────────────────────────────
 st.set_page_config(page_title="OM Analyzer", page_icon="🏢", layout="wide")
 
 st.markdown("""
 <style>
 #MainMenu, footer, header {visibility: hidden;}
-.stApp { background: #F5F4EF; }
-.block-container { padding-top: 1.5rem !important; max-width: 1100px !important; }
-section[data-testid="stSidebar"] { background: #1A1A18 !important; }
-section[data-testid="stSidebar"] * { color: #C8C8B8 !important; }
-section[data-testid="stSidebar"] h1,
-section[data-testid="stSidebar"] h2,
-section[data-testid="stSidebar"] h3 { color: #D4B07A !important; }
-section[data-testid="stSidebar"] .stMarkdown p { font-size: 13px; }
+html, body, [class*="css"], .stApp, .main {
+    background-color: #0D1B2A !important; color: #E0E6EF !important;
+}
+.block-container {
+    padding-top: 0 !important; max-width: 100% !important;
+    padding-left: 0 !important; padding-right: 0 !important;
+    background: #0D1B2A !important;
+}
+section[data-testid="stSidebar"] { display: none !important; }
+.rv-navbar {
+    background: #0A1520; border-bottom: 2px solid #1E3148;
+    padding: 0 40px; height: 76px;
+    display: flex; align-items: center; justify-content: space-between;
+    position: sticky; top: 0; z-index: 999;
+}
+.rv-logo-block { display: flex; align-items: center; gap: 16px; }
+.rv-logo-icon {
+    width: 52px; height: 52px; background: #1DC9A4; border-radius: 14px;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 800; font-size: 18px; color: #0D1B2A; flex-shrink: 0;
+}
+.rv-logo-text { display: flex; flex-direction: column; }
+.rv-logo-title { font-size: 24px; font-weight: 700; color: #FFFFFF; line-height: 1.2; }
+.rv-logo-sub { font-size: 11px; font-weight: 500; color: #5A8FAA; letter-spacing: 0.1em; text-transform: uppercase; margin-top: 3px; }
+.rv-nav-right { display: flex; align-items: center; gap: 20px; }
+.rv-version { font-size: 12px; color: #4A6A80; }
+.rv-claude-badge {
+    background: transparent; border: 1.5px solid #1DC9A4; color: #1DC9A4;
+    border-radius: 20px; padding: 6px 16px; font-size: 12px; font-weight: 700;
+    display: flex; align-items: center; gap: 6px;
+}
+.rv-right-panel {
+    width: 300px; flex-shrink: 0; background: #0A1520;
+    border-left: 1px solid #1E3148; padding: 32px 22px;
+}
+.rv-panel-heading {
+    font-size: 11px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase;
+    color: #1DC9A4; margin-bottom: 10px; margin-top: 22px;
+}
+.rv-panel-heading:first-child { margin-top: 0; }
+.rv-bullet { display: flex; align-items: flex-start; gap: 8px; margin-bottom: 7px; }
+.rv-bullet-dot { width: 5px; height: 5px; border-radius: 50%; background: #1DC9A4; margin-top: 6px; flex-shrink: 0; }
+.rv-bullet-txt { font-size: 12px; color: #7A9AB8; line-height: 1.5; }
+.rv-brokers { font-size: 11px; color: #4A6A80; line-height: 1.8; margin-top: 4px; }
+.rv-meta { font-size: 11px; color: #4A6A80; margin-top: 5px; }
+.rv-meta span { color: #8AA8C0; }
+.rv-divider { border: none; border-top: 1px solid #1A2E42; margin: 18px 0; }
+.rv-section-label {
+    font-size: 11px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase;
+    color: #1DC9A4; margin-bottom: 14px; margin-top: 32px;
+}
+.rv-section-label:first-child { margin-top: 0; }
+.rv-upload-card {
+    background: #0F2133; border: 1px solid #1E3148; border-radius: 14px;
+    padding: 28px 32px 18px; margin-bottom: 6px;
+}
+.rv-upload-title { font-size: 20px; font-weight: 700; color: #FFFFFF; margin-bottom: 8px; }
+.rv-upload-sub { font-size: 13px; color: #5A8FAA; }
+.rv-steps { display: flex; gap: 14px; margin-top: 18px; }
+.rv-step { flex: 1; background: #0F2133; border: 1px solid #1E3148; border-radius: 10px; padding: 16px 18px; }
+.rv-step-num { font-size: 11px; font-weight: 700; color: #1DC9A4; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 6px; }
+.rv-step-txt { font-size: 13px; color: #C0D0E0; line-height: 1.5; }
+.rv-file-info {
+    background: #0F2133; border: 1px solid #1E3148; border-radius: 8px;
+    padding: 10px 16px; font-size: 13px; color: #5A8FAA; margin-bottom: 12px;
+}
+.rv-file-info b { color: #C0D0E0; }
+.rv-success {
+    background: #091C11; border: 1px solid #1DC9A4; border-radius: 10px;
+    padding: 16px 20px; margin: 16px 0; display: flex; align-items: center; gap: 12px;
+}
+.rv-success-icon { font-size: 22px; }
+.rv-success-text { font-size: 14px; color: #C0D0E0; }
+.rv-success-text b { color: #1DC9A4; }
+.stFileUploader > div { background: #0F2133 !important; border: 1.5px dashed #1DC9A4 !important; border-radius: 10px !important; }
+.stFileUploader * { color: #8AA8C0 !important; }
+.stButton > button {
+    background: #1DC9A4 !important; color: #0D1B2A !important; border: none !important;
+    border-radius: 8px !important; font-weight: 700 !important; font-size: 15px !important;
+    padding: 12px 0 !important; width: 100% !important;
+}
+.stButton > button:hover { background: #18B090 !important; }
+.stDownloadButton > button {
+    background: #0F2133 !important; color: #1DC9A4 !important; border: 1.5px solid #1DC9A4 !important;
+    border-radius: 8px !important; font-weight: 600 !important; font-size: 14px !important;
+    padding: 10px 0 !important; width: 100% !important;
+}
+.stDownloadButton > button:hover { background: #1DC9A420 !important; }
 div[data-testid="metric-container"] {
-    background: white; border: 1px solid #E0DED5;
-    border-radius: 10px; padding: 12px 16px;
+    background: #0F2133 !important; border: 1px solid #1E3148 !important;
+    border-radius: 10px !important; padding: 14px 16px !important;
 }
-div[data-testid="metric-container"] label { color: #888 !important; font-size: 12px !important; }
-div[data-testid="metric-container"] [data-testid="stMetricValue"] {
-    font-size: 22px !important; color: #1A1A18 !important; font-weight: 500 !important;
-}
-.gold-header {
-    background: #1A1A18; color: #D4B07A; padding: 6px 14px;
-    border-radius: 6px; font-size: 13px; font-weight: 500;
-    margin: 18px 0 8px; display: inline-block;
-}
-.flag-warn   { background:#FFF8EC; border-left:3px solid #D4A054; padding:10px 14px; border-radius:0 6px 6px 0; margin:6px 0; }
-.flag-good   { background:#EAF5EE; border-left:3px solid #5AAA7A; padding:10px 14px; border-radius:0 6px 6px 0; margin:6px 0; }
-.flag-info   { background:#EAF0FA; border-left:3px solid #5A8AC0; padding:10px 14px; border-radius:0 6px 6px 0; margin:6px 0; }
-.flag-verify { background:#F5F0FF; border-left:3px solid #9A7ACA; padding:10px 14px; border-radius:0 6px 6px 0; margin:6px 0; }
-.flag-title  { font-size:13px; font-weight:600; margin-bottom:3px; }
-.flag-body   { font-size:12px; color:#555; line-height:1.5; }
+div[data-testid="metric-container"] label { color: #5A8FAA !important; font-size: 11px !important; }
+div[data-testid="metric-container"] [data-testid="stMetricValue"] { font-size: 20px !important; color: #FFFFFF !important; font-weight: 600 !important; }
+.stProgress > div > div { background: #1DC9A4 !important; }
+.stAlert, .stSuccess, .stError, .stInfo { background: #0F2133 !important; border-color: #1E3148 !important; color: #C0D0E0 !important; border-radius: 8px !important; }
+.stTabs [data-baseweb="tab-list"] { background: transparent !important; border-bottom: 1px solid #1E3148 !important; }
+.stTabs [data-baseweb="tab"] { color: #5A8FAA !important; font-size: 13px !important; background: transparent !important; border-radius: 6px 6px 0 0 !important; }
+.stTabs [aria-selected="true"] { color: #1DC9A4 !important; border-bottom: 2px solid #1DC9A4 !important; background: #0F2133 !important; }
+.stTabs [data-baseweb="tab-panel"] { background: #0D1B2A !important; padding-top: 16px !important; }
+.streamlit-expanderHeader { background: #0F2133 !important; color: #C0D0E0 !important; border-radius: 8px !important; border: 1px solid #1E3148 !important; }
+.gold-header { background: #1A1A18; color: #D4B07A; padding: 5px 14px; border-radius: 6px; font-size: 12px; font-weight: 600; margin: 16px 0 8px; display: inline-block; }
+.flag-warn   { background:#1C1408; border-left:3px solid #D4A054; padding:10px 14px; border-radius:0 6px 6px 0; margin:6px 0; }
+.flag-good   { background:#091C11; border-left:3px solid #1DC9A4; padding:10px 14px; border-radius:0 6px 6px 0; margin:6px 0; }
+.flag-info   { background:#091525; border-left:3px solid #5A8AC0; padding:10px 14px; border-radius:0 6px 6px 0; margin:6px 0; }
+.flag-verify { background:#130E1E; border-left:3px solid #9A7ACA; padding:10px 14px; border-radius:0 6px 6px 0; margin:6px 0; }
+.flag-title  { font-size:13px; font-weight:600; margin-bottom:3px; color:#E0E6EF; }
+.flag-body   { font-size:12px; color:#7A9AB8; line-height:1.5; }
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: #0A1520; }
+::-webkit-scrollbar-thumb { background: #1E3148; border-radius: 3px; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -358,7 +441,6 @@ CRITICAL EXTRACTION RULES:
 
 def analyze_om(pdf_text: str, api_key: str, progress_cb=None) -> dict:
     import httpx
-
     MAX = 180_000
     text = pdf_text[:MAX]
     if len(pdf_text) > MAX and progress_cb:
@@ -366,7 +448,6 @@ def analyze_om(pdf_text: str, api_key: str, progress_cb=None) -> dict:
     if progress_cb:
         progress_cb("Sending to Claude AI for analysis...")
 
-    # Use non-streaming with a long timeout — streaming drops connection on large OMs
     client = anthropic.Anthropic(
         api_key=api_key,
         http_client=httpx.Client(timeout=httpx.Timeout(600.0, connect=30.0))
@@ -384,26 +465,22 @@ def analyze_om(pdf_text: str, api_key: str, progress_cb=None) -> dict:
         return raw, resp.stop_reason
 
     def _parse(raw):
-        # Attempt 1: direct parse
         try:
             return json.loads(raw)
         except json.JSONDecodeError:
             pass
-        # Attempt 2: extract outermost JSON object
         try:
             m = re.search(r"\{.*\}", raw, re.DOTALL)
             if m:
                 return json.loads(m.group())
         except json.JSONDecodeError:
             pass
-        # Attempt 3: fix truncated JSON
         try:
             return json.loads(_fix_truncated_json(raw))
         except Exception:
             pass
         return None
 
-    # ── Primary call ──────────────────────────────────────────────────────────
     raw, stop_reason = _call(
         f"Analyze this OM:\n\n{text}",
         max_tok=32000,
@@ -416,7 +493,6 @@ def analyze_om(pdf_text: str, api_key: str, progress_cb=None) -> dict:
     if result is not None:
         return result
 
-    # ── Truncation recovery: ask Haiku to complete the broken JSON ────────────
     if stop_reason == "max_tokens" or len(raw) > 100:
         if progress_cb:
             progress_cb("Response truncated — retrying completion...")
@@ -458,40 +534,20 @@ def _v(val, fmt=None, suffix="", default="N/A"):
         try: return f"${float(val):,.0f}{suffix}"
         except: return str(val)
     if fmt == "%":
-        try:
-            f = float(val)
-            # If value looks like a decimal proportion (≤ 1.5), multiply by 100
-            if abs(f) <= 1.5:
-                f = f * 100
-            return f"{f:.2f}%"
+        try: return f"{float(val):.1f}%"
         except: return str(val)
     if fmt == "n":
         try: return f"{int(float(val)):,}{suffix}"
         except: return str(val)
     return f"{val}{suffix}"
 
-def _pct(val, suffix="", default="N/A"):
-    """Format a percentage that may be stored as decimal (0.0464) or whole (4.64).
-    Rule: if abs(val) <= 2.0, treat as decimal proportion and multiply by 100."""
-    if val is None or val == "": return default
-    try:
-        f = float(val)
-        if abs(f) <= 2.0:
-            f = f * 100
-        result = f"{f:.2f}%"
-        return result + suffix if suffix else result
-    except:
-        # Already a string like "4.64%" — return as-is
-        s = str(val).strip()
-        return s if s.endswith("%") else f"{s}%"
-
-def _psf(val, default="—"):
+def _psf(val):
     """Safe PSF formatter — returns '—' for None/zero/non-numeric."""
-    if val is None or val == "" or val == "N/A": return default
+    if val is None or val == "" or val == "N/A": return "—"
     try:
         f = float(val)
-        return default if f == 0 else f"${f:.2f}"
-    except: return default
+        return "—" if f == 0 else f"${f:.2f}"
+    except: return "—"
 
 def _is_num(v):
     """Return True only if v is a real number (not None, '', 'N/A', 'n/a')."""
@@ -761,12 +817,12 @@ def build_excel(d: dict, filename: str) -> bytes:
         ("Exterior / Additional CapEx", _v(va.get("exterior_capex"), "$")),
         ("Monthly Rent Premium",        _v(va.get("monthly_premium"), "$")),
         ("Annual Rent Premium",         _v(va.get("annual_premium"), "$")),
-        ("Return on Investment",        _pct(va.get('roi_pct'))),
+        ("Return on Investment",        f"{va.get('roi_pct') or 'N/A'}%"),
         ("Value-Add Scope",             va.get("scope")),
     ]):
         r = _kv(ws1, r, k, v, alt=bool(i % 2))
 
-    # ── Revenue Upside Levers (Forma-style structured lever table) ────────────
+    # ── Revenue Upside Levers ─────────────────────────────────────────────────
     levers = d.get("value_add_levers") or []
     if levers:
         r = _sp(ws1, r)
@@ -793,7 +849,6 @@ def build_excel(d: dict, filename: str) -> bytes:
             else:
                 r = _drow(ws1, r, row_data, alt=bool(i % 2),
                           als=["left", "center", "right", "right", "left"])
-        # Auto-append total row if OM didn't include one
         if levers and "TOTAL" not in (levers[-1].get("lever") or "").upper() and total_auto > 0:
             r = _noirow(ws1, r, ["TOTAL ANNUAL REVENUE UPSIDE", "", "", _v(total_auto, "$"), ""])
 
@@ -892,7 +947,7 @@ def build_excel(d: dict, filename: str) -> bytes:
     r = _shdr(ws1, r, "Tax Abatement Program")
     for i, (k, v) in enumerate([
         ("Program",               tax.get("abatement_program")),
-        ("Abatement %",           _pct(tax.get('abatement_pct'))),
+        ("Abatement %",           f"{tax.get('abatement_pct') or 'N/A'}%"),
         ("Commitment Term",       tax.get("abatement_term_note")),
         ("AMI Requirement",       f"{tax.get('ami_pct') or 'N/A'}% of Area Median Income"),
         ("Annual Tax Savings",    _v(tax.get("abatement_annual_savings"), "$")),
@@ -954,7 +1009,7 @@ def build_excel(d: dict, filename: str) -> bytes:
         r = _kv(ws1, r, k, v, alt=bool(i % 2))
     r = _shdr(ws1, r, "Property Management")
     for i, (k, v) in enumerate([
-        ("Management Fee %",   _pct(mgmt.get('fee_pct'), ' of EGI')),
+        ("Management Fee %",   f"{mgmt.get('fee_pct') or 'N/A'}% of EGI"),
         ("Annual Fee",         _v(mgmt.get("fee_annual"), "$")),
         ("Per Unit / Year",    _v(mgmt.get("fee_per_unit"), "$")),
         ("Current Manager",    mgmt.get("current_manager")),
@@ -999,8 +1054,8 @@ def build_excel(d: dict, filename: str) -> bytes:
     if any(nf.get(k) for k in ["loan_type","lender","loan_to_value","interest_rate"]):
         r = _drow(ws1, r, [
             nf.get("loan_type") or "—", nf.get("lender") or "—",
-            _v(nf.get("loan_amount"), "$"), _pct(nf.get('loan_to_value')),
-            _pct(nf.get('interest_rate')), nf.get("rate_type") or "—",
+            _v(nf.get("loan_amount"), "$"), f"{nf.get('loan_to_value') or 'N/A'}%",
+            f"{nf.get('interest_rate') or 'N/A'}%", nf.get("rate_type") or "—",
             nf.get("loan_term_years") or "—", nf.get("amortization_years") or "—",
             nf.get("interest_only_period") or "—", nf.get("dscr") or "—",
             nf.get("recourse") or "—", nf.get("notes") or "—",
@@ -1021,8 +1076,8 @@ def build_excel(d: dict, filename: str) -> bytes:
     if any(asd.get(k) for k in ["loan_type","lender","loan_to_value","interest_rate"]):
         r = _drow(ws1, r, [
             asd.get("loan_type") or "—", asd.get("lender") or "—",
-            _v(asd.get("loan_amount"), "$"), _pct(asd.get('loan_to_value')),
-            _pct(asd.get('interest_rate')), asd.get("rate_type") or "—",
+            _v(asd.get("loan_amount"), "$"), _pct(asd.get("loan_to_value")),
+            _pct(asd.get("interest_rate")), asd.get("rate_type") or "—",
             asd.get("loan_term_years") or "—", asd.get("amortization_years") or "—",
             asd.get("interest_only_period") or "—",
             asd.get("origination_date") or "—", asd.get("maturity_date") or "—",
@@ -1369,332 +1424,348 @@ def build_excel(d: dict, filename: str) -> bytes:
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# SECTION 4 — STREAMLIT UI  (unchanged from original)
+# ══════════════════════════════════════════════════════════════════════════════
+# SECTION 4 — STREAMLIT UI
 # ══════════════════════════════════════════════════════════════════════════════
 
 with st.sidebar:
-    st.markdown("## 🏢 OM Analyzer")
-    st.markdown("---")
-    st.markdown("**What this does**")
+    pass  # hidden via CSS
+
+st.markdown("""
+<div class="rv-navbar">
+  <div class="rv-logo-block">
+    <div class="rv-logo-icon">OM</div>
+    <div class="rv-logo-text">
+      <div class="rv-logo-title">OM Analyzer</div>
+      <div class="rv-logo-sub">RealVal &nbsp;·&nbsp; Multifamily Underwriting Intelligence</div>
+    </div>
+  </div>
+  <div class="rv-nav-right">
+    <span class="rv-version">v3.0</span>
+    <div class="rv-claude-badge">⚡ CLAUDE AI</div>
+  </div>
+</div>
+""", unsafe_allow_html=True)
+
+main_col, right_col = st.columns([3, 1], gap="small")
+
+with right_col:
     st.markdown("""
-Upload any Multifamily Offering Memorandum PDF and get a structured 3-tab Excel underwriting report.
+<div class="rv-right-panel">
+  <div class="rv-panel-heading">What's in the Report</div>
+  <div class="rv-panel-heading" style="margin-top:14px;">Tab 1 — Financials</div>
+  <div class="rv-bullet"><div class="rv-bullet-dot"></div><div class="rv-bullet-txt">Deal summary &amp; property details</div></div>
+  <div class="rv-bullet"><div class="rv-bullet-dot"></div><div class="rv-bullet-txt">Unit mix with rent upside</div></div>
+  <div class="rv-bullet"><div class="rv-bullet-dot"></div><div class="rv-bullet-txt">Value-add by floor plan &amp; revenue levers</div></div>
+  <div class="rv-bullet"><div class="rv-bullet-dot"></div><div class="rv-bullet-txt">Operating statement (all periods)</div></div>
+  <div class="rv-bullet"><div class="rv-bullet-dot"></div><div class="rv-bullet-txt">Property tax &amp; abatement</div></div>
+  <div class="rv-bullet"><div class="rv-bullet-dot"></div><div class="rv-bullet-txt">Replacement cost, insurance &amp; management</div></div>
+  <div class="rv-bullet"><div class="rv-bullet-dot"></div><div class="rv-bullet-txt">Financing &amp; debt terms (incl. IO period)</div></div>
+  <div class="rv-bullet"><div class="rv-bullet-dot"></div><div class="rv-bullet-txt">Underwriting flags</div></div>
+  <hr class="rv-divider">
+  <div class="rv-panel-heading">Tab 2 — Comparables</div>
+  <div class="rv-bullet"><div class="rv-bullet-dot"></div><div class="rv-bullet-txt">Garden &amp; townhouse rent comps</div></div>
+  <div class="rv-bullet"><div class="rv-bullet-dot"></div><div class="rv-bullet-txt">Additional income opportunities</div></div>
+  <div class="rv-bullet"><div class="rv-bullet-dot"></div><div class="rv-bullet-txt">Sale comparables with buyer/seller</div></div>
+  <hr class="rv-divider">
+  <div class="rv-panel-heading">Tab 3 — Demographics</div>
+  <div class="rv-bullet"><div class="rv-bullet-dot"></div><div class="rv-bullet-txt">Population &amp; income (3-mi / 5-mi)</div></div>
+  <div class="rv-bullet"><div class="rv-bullet-dot"></div><div class="rv-bullet-txt">Affordability analysis</div></div>
+  <div class="rv-bullet"><div class="rv-bullet-dot"></div><div class="rv-bullet-txt">Schools, crime &amp; quality of life</div></div>
+  <div class="rv-bullet"><div class="rv-bullet-dot"></div><div class="rv-bullet-txt">Major employers &amp; developments</div></div>
+  <div class="rv-bullet"><div class="rv-bullet-dot"></div><div class="rv-bullet-txt">Market &amp; submarket overview</div></div>
+  <div class="rv-bullet"><div class="rv-bullet-dot"></div><div class="rv-bullet-txt">Utilities &amp; site information</div></div>
+  <hr class="rv-divider">
+  <div class="rv-panel-heading">Supported Brokers</div>
+  <div class="rv-brokers">JLL · CBRE · Marcus &amp; Millichap · Cushman &amp; Wakefield · Newmark · Colliers · Berkadia · Walker &amp; Dunlop · Northmarq</div>
+  <hr class="rv-divider">
+  <div class="rv-meta">Processing time: <span>30–90 sec</span></div>
+  <div class="rv-meta">Max file size: <span>50 MB</span></div>
+  <div class="rv-meta">Output: <span>3-tab Excel (.xlsx)</span></div>
+</div>
+""", unsafe_allow_html=True)
 
-**Tab 1 — Financials:**
-- Deal summary & property details
-- Unit mix with rent upside
-- Value-add by floor plan & upgrade scope
-- Operating statement (all periods)
-- Property tax & abatement
-- Replacement cost, insurance & management
-- Affordability & rent growth runway
-- Financing & debt terms
-- Underwriting flags
+with main_col:
+    st.markdown("""
+<div style="padding: 32px 40px 0;">
+  <div class="rv-section-label">Upload Offering Memorandum</div>
+  <div class="rv-upload-card">
+    <div class="rv-upload-title">Upload Your OM</div>
+    <div class="rv-upload-sub">Supports any broker PDF — JLL, CBRE, Marcus &amp; Millichap, Northmarq and more</div>
+  </div>
+</div>
+""", unsafe_allow_html=True)
 
-**Tab 2 — Comparables:**
-- Garden & townhouse rent comps
-- Additional income opportunities
-- Sale comparables with buyer/seller
-
-**Tab 3 — Demographics:**
-- Population & income (3-mi / 5-mi)
-- Affordability analysis
-- Schools & crime
-- Major employers & developments
-- Market & submarket overview
-- Utilities & site information
-""")
-    st.markdown("---")
-    st.markdown("**Supported Brokers**")
-    st.markdown("JLL · CBRE · Marcus & Millichap · Cushman & Wakefield · Newmark · Colliers · Berkadia · Walker & Dunlop · and more")
-    st.markdown("---")
-    st.markdown("**Processing time:** 30–90 sec")
-    st.markdown("**Max file size:** 50 MB")
-
-st.markdown("# 🏢 Multifamily OM Analyzer")
-st.markdown("Upload an Offering Memorandum PDF → AI extracts all underwriting data → download a structured 3-tab report.")
-st.markdown("---")
-
-api_key = st.secrets.get("ANTHROPIC_API_KEY", os.environ.get("ANTHROPIC_API_KEY", ""))
-if not api_key:
-    st.error("""
+    api_key = st.secrets.get("ANTHROPIC_API_KEY", os.environ.get("ANTHROPIC_API_KEY", ""))
+    if not api_key:
+        st.error("""
 **API key not configured.**
 - **Streamlit Cloud:** Go to ⚙️ Settings → Secrets → add: `ANTHROPIC_API_KEY = "sk-ant-..."`
 - **Local:** Create `.streamlit/secrets.toml` with the same line.
 """)
-    st.stop()
-os.environ["ANTHROPIC_API_KEY"] = api_key
+        st.stop()
+    os.environ["ANTHROPIC_API_KEY"] = api_key
 
-uploaded = st.file_uploader("Drop your OM PDF here", type=["pdf"], label_visibility="collapsed")
+    uploaded = st.file_uploader("Drop your OM PDF here", type=["pdf"], label_visibility="collapsed")
 
-if uploaded is None:
-    col1, col2, col3 = st.columns(3)
-    with col1: st.info("**Step 1** — Upload a PDF using the box above")
-    with col2: st.info("**Step 2** — Click Analyze (takes 30–90 sec)")
-    with col3: st.info("**Step 3** — Download the underwriting Excel")
-    st.stop()
-
-size_mb = uploaded.size / 1024 / 1024
-st.markdown(f"**File:** `{uploaded.name}` — {size_mb:.1f} MB")
-
-if st.button("🔍  Analyze Offering Memorandum", type="primary", use_container_width=True):
-    progress_bar = st.progress(0, text="Starting...")
-    status_box   = st.empty()
-
-    def set_progress(pct, msg):
-        progress_bar.progress(pct, text=msg)
-        status_box.markdown(f"*{msg}*")
-
-    try:
-        set_progress(10, "Extracting text from PDF…")
-        with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
-            tmp.write(uploaded.getvalue())
-            tmp_path = tmp.name
-        pdf_text = extract_pdf_text(tmp_path)
-        os.unlink(tmp_path)
-
-        if not pdf_text or len(pdf_text.strip()) < 200:
-            progress_bar.empty(); status_box.empty()
-            st.error("Could not extract readable text. This PDF may be scanned — please use a text-based PDF.")
-            st.stop()
-
-        set_progress(30, f"Extracted {len(pdf_text):,} characters. Sending to Claude AI…")
-        def log(msg): set_progress(55, msg)
-        data = analyze_om(pdf_text, api_key, log)
-        set_progress(75, "Generating Excel report…")
-        excel_bytes = build_excel(data, uploaded.name)
-        set_progress(100, "Done!")
-        progress_bar.empty(); status_box.empty()
-
-    except Exception as e:
-        progress_bar.empty(); status_box.empty()
-        st.error(f"**Error:** {e}")
-        with st.expander("Full error"):
-            import traceback; st.code(traceback.format_exc())
+    if uploaded is None:
+        st.markdown("""
+<div style="padding: 0 40px;">
+<div class="rv-steps">
+  <div class="rv-step"><div class="rv-step-num">Step 1</div><div class="rv-step-txt">Upload a PDF using the box above</div></div>
+  <div class="rv-step"><div class="rv-step-num">Step 2</div><div class="rv-step-txt">Click Analyze (takes 30–90 sec)</div></div>
+  <div class="rv-step"><div class="rv-step-num">Step 3</div><div class="rv-step-txt">Download the underwriting Excel</div></div>
+</div>
+</div>
+""", unsafe_allow_html=True)
         st.stop()
 
-    prop_name = (data.get("property") or {}).get("name") or "Property"
-    broker_name = (data.get("broker") or {}).get("name") or "Unknown broker"
-    st.success(f"✅  Report ready — **{prop_name}**  ·  Broker: {broker_name}")
+    size_mb = uploaded.size / 1024 / 1024
+    st.markdown(f"""
+<div style="padding: 0 40px;">
+<div class="rv-file-info">
+  📄 &nbsp;<b>{uploaded.name}</b> &nbsp;—&nbsp; {size_mb:.1f} MB
+</div>
+</div>
+""", unsafe_allow_html=True)
 
-    safe = re.sub(r"[^a-zA-Z0-9_\- ]", "", prop_name).strip().replace(" ", "_")
-    st.download_button(
-        label="⬇️  Download Underwriting Report (Excel)",
-        data=excel_bytes,
-        file_name=f"{safe}_Underwriting_Report.xlsx",
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        use_container_width=True,
-    )
+    if st.button("🔍  Analyze Offering Memorandum", type="primary", use_container_width=True):
+        progress_bar = st.progress(0, text="Starting...")
+        status_box   = st.empty()
 
-    # ── Summary metrics ───────────────────────────────────────────────────────
-    pd_  = data.get("property") or {}
-    inv_ = data.get("investment") or {}
-    va_  = data.get("value_add") or {}
-    tax_ = data.get("tax") or {}
-    m1, m2, m3, m4, m5, m6 = st.columns(6)
-    with m1: st.metric("Units",       _v(pd_.get("units"), "n"))
-    with m2: st.metric("Year Built",  _v(pd_.get("year_built")))
-    with m3: st.metric("Occupancy",   _pct(pd_.get("occupancy_pct")))
-    with m4: st.metric("Avg Rent",    _v(inv_.get("market_rent"), "$"))
-    with m5: st.metric("Reno ROI",    _pct(va_.get('roi_pct')))
-    with m6: st.metric("Tax Savings", _v(tax_.get("abatement_annual_savings"), "$"))
+        def set_progress(pct, msg):
+            progress_bar.progress(pct, text=msg)
+            status_box.markdown(
+                f"<div style='font-size:12px;color:#5A8FAA;margin-top:4px;'>{msg}</div>",
+                unsafe_allow_html=True)
 
-    # ── Preview tabs ─────────────────────────────────────────────────────────
-    tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs([
-        "Unit Mix", "Value-Add", "Rent Comps", "Financials",
-        "Tax & Abatement", "Demographics", "Financing", "Flags"
-    ])
+        try:
+            set_progress(10, "Extracting text from PDF…")
+            with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
+                tmp.write(uploaded.getvalue())
+                tmp_path = tmp.name
+            pdf_text = extract_pdf_text(tmp_path)
+            os.unlink(tmp_path)
 
-    with tab1:
-        umix_ = data.get("unit_mix") or []
-        if umix_:
+            if not pdf_text or len(pdf_text.strip()) < 200:
+                progress_bar.empty(); status_box.empty()
+                st.error("Could not extract readable text. This PDF may be scanned — please use a text-based PDF.")
+                st.stop()
+
+            set_progress(30, f"Extracted {len(pdf_text):,} characters. Sending to Claude AI…")
+            def log(msg): set_progress(55, msg)
+            data = analyze_om(pdf_text, api_key, log)
+            set_progress(75, "Generating Excel report…")
+            excel_bytes = build_excel(data, uploaded.name)
+            set_progress(100, "Done!")
+            progress_bar.empty(); status_box.empty()
+
+        except Exception as e:
+            progress_bar.empty(); status_box.empty()
+            st.error(f"**Error:** {e}")
+            with st.expander("Full traceback"):
+                import traceback; st.code(traceback.format_exc())
+            st.stop()
+
+        prop_name   = (data.get("property") or {}).get("name") or "Property"
+        broker_name = (data.get("broker")   or {}).get("name") or "Unknown broker"
+
+        st.markdown(f"""
+<div style="padding: 0 40px;">
+<div class="rv-success">
+  <div class="rv-success-icon">✅</div>
+  <div class="rv-success-text">Report ready &nbsp;·&nbsp; <b>{prop_name}</b> &nbsp;·&nbsp; Broker: {broker_name}</div>
+</div>
+</div>
+""", unsafe_allow_html=True)
+
+        safe = re.sub(r"[^a-zA-Z0-9_\- ]", "", prop_name).strip().replace(" ", "_")
+        st.download_button(
+            label="⬇️  Download Underwriting Report (.xlsx)",
+            data=excel_bytes,
+            file_name=f"{safe}_Underwriting_Report.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            use_container_width=True,
+        )
+
+        st.markdown("<div style='margin-top:24px;'>", unsafe_allow_html=True)
+        pd_  = data.get("property")   or {}
+        inv_ = data.get("investment") or {}
+        va_  = data.get("value_add")  or {}
+        tax_ = data.get("tax")        or {}
+        m1, m2, m3, m4, m5, m6 = st.columns(6)
+        with m1: st.metric("Units",       _v(pd_.get("units"), "n"))
+        with m2: st.metric("Year Built",  _v(pd_.get("year_built")))
+        with m3: st.metric("Occupancy",   _pct(pd_.get("occupancy_pct")))
+        with m4: st.metric("Avg Rent",    _v(inv_.get("market_rent"), "$"))
+        with m5: st.metric("Reno ROI",    _pct(va_.get("roi_pct")))
+        with m6: st.metric("Tax Savings", _v(tax_.get("abatement_annual_savings"), "$"))
+        st.markdown("</div>", unsafe_allow_html=True)
+
+        st.markdown("<div style='margin-top:20px;'>", unsafe_allow_html=True)
+        tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs([
+            "Unit Mix", "Value-Add", "Rent Comps", "Financials",
+            "Tax & Abatement", "Demographics", "Financing", "Flags"
+        ])
+
+        with tab1:
+            umix_ = data.get("unit_mix") or []
+            if umix_:
+                import pandas as pd
+                st.dataframe(pd.DataFrame([{
+                    "Type": u.get("type"), "Units": u.get("count"), "SF": u.get("sf"),
+                    "Market Rent": u.get("market_rent"), "Eff. Rent": u.get("eff_rent"),
+                    "Target Rent": u.get("target_rent"), "Upside/Unit": u.get("upside"),
+                } for u in umix_]), use_container_width=True, hide_index=True)
+            else:
+                st.info("No unit mix data extracted.")
+
+        with tab2:
             import pandas as pd
-            st.dataframe(pd.DataFrame([{
-                "Type": u.get("type"), "Units": u.get("count"), "SF": u.get("sf"),
-                "Market Rent": u.get("market_rent"), "Eff. Rent": u.get("eff_rent"),
-                "Target Rent": u.get("target_rent"), "Upside/Unit": u.get("upside"),
-            } for u in umix_]), use_container_width=True, hide_index=True)
-        else:
-            st.info("No unit mix data extracted.")
+            va_plans = va_.get("by_floor_plan") or []
+            if va_plans:
+                st.markdown('<div class="gold-header">Floor Plan Value-Add</div>', unsafe_allow_html=True)
+                st.dataframe(pd.DataFrame([{
+                    "Type": p.get("type"), "SF": p.get("sf"), "Units": p.get("units"),
+                    "In-Place Rent": p.get("inplace_rent"), "Rehab Cost": p.get("rehab_cost"),
+                    "Premium/Unit": p.get("premium"), "Post-Rehab Rent": p.get("post_rehab_rent"),
+                } for p in va_plans]), use_container_width=True, hide_index=True)
+            levers_ = data.get("value_add_levers") or []
+            if levers_:
+                st.markdown('<div class="gold-header">Revenue Upside Levers</div>', unsafe_allow_html=True)
+                st.dataframe(pd.DataFrame([{
+                    "Lever": lv.get("lever"), "Units": lv.get("units"),
+                    "Mo. Premium": lv.get("monthly_premium"), "Annual Upside": lv.get("annual_upside"),
+                    "Notes": lv.get("notes"),
+                } for lv in levers_]), use_container_width=True, hide_index=True)
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.metric("Total Reno Cost", _v(va_.get("total_cost"), "$"))
+                st.metric("Cost Per Unit",   _v(va_.get("cost_per_unit"), "$"))
+            with col2:
+                st.metric("Annual Premium",  _v(va_.get("annual_premium"), "$"))
+                st.metric("Monthly Premium", _v(va_.get("monthly_premium"), "$"))
+            with col3:
+                st.metric("ROI",             _pct(va_.get("roi_pct")))
+                st.metric("Exterior CapEx",  _v(va_.get("exterior_capex"), "$"))
 
-    with tab2:
-        import pandas as pd
-        va_plans = va_.get("by_floor_plan") or []
-        if va_plans:
-            st.markdown('<div class="gold-header">Floor Plan Value-Add</div>', unsafe_allow_html=True)
-            st.dataframe(pd.DataFrame([{
-                "Type": p.get("type"), "SF": p.get("sf"), "Units": p.get("units"),
-                "In-Place Rent": p.get("inplace_rent"), "Rehab Cost": p.get("rehab_cost"),
-                "Premium/Unit": p.get("premium"), "Post-Rehab Rent": p.get("post_rehab_rent"),
-            } for p in va_plans]), use_container_width=True, hide_index=True)
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            st.metric("Total Reno Cost", _v(va_.get("total_cost"), "$"))
-            st.metric("Cost Per Unit",   _v(va_.get("cost_per_unit"), "$"))
-        with col2:
-            st.metric("Annual Premium",  _v(va_.get("annual_premium"), "$"))
-            st.metric("Monthly Premium", _v(va_.get("monthly_premium"), "$"))
-        with col3:
-            st.metric("ROI",             _pct(va_.get('roi_pct')))
-            st.metric("Exterior CapEx",  _v(va_.get("exterior_capex"), "$"))
-
-    with tab3:
-        import pandas as pd
-        rg_  = data.get("rent_comps_garden") or []
-        rth_ = data.get("rent_comps_townhouse") or []
-        if rg_:
-            st.markdown('<div class="gold-header">Two Bedroom Garden</div>', unsafe_allow_html=True)
-            st.dataframe(pd.DataFrame([{"Property": c.get("name"), "Rent": c.get("rent"), "Notes": c.get("notes")} for c in rg_]),
-                         use_container_width=True, hide_index=True)
-        if rth_:
-            st.markdown('<div class="gold-header">Two Bedroom Townhouse</div>', unsafe_allow_html=True)
-            st.dataframe(pd.DataFrame([{"Property": c.get("name"), "Rent": c.get("rent"), "Notes": c.get("notes")} for c in rth_]),
-                         use_container_width=True, hide_index=True)
-        if not rg_ and not rth_:
-            st.info("No comp data extracted.")
-
-    with tab4:
-        fin_ = data.get("financials") or {}
-        periods_ = fin_.get("periods") or []
-        inc_ = fin_.get("income_lines") or []
-        exp_ = fin_.get("expense_lines") or []
-        if periods_ and (inc_ or exp_):
+        with tab3:
             import pandas as pd
-            rows = []
-            for line in inc_ + exp_:
-                row = {"Line Item": line.get("item", "—")}
-                for p in periods_:
-                    row[p] = line.get("values", {}).get(p)
-                row["Note"] = (line.get("note") or "")[:120]
-                rows.append(row)
-            st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
-        else:
-            st.info("No financial data extracted.")
+            rg_     = data.get("rent_comps_garden")    or []
+            rth_    = data.get("rent_comps_townhouse") or []
+            rcomps_ = data.get("rent_comps")           or []
+            if rg_:
+                st.markdown('<div class="gold-header">Garden Comps</div>', unsafe_allow_html=True)
+                st.dataframe(pd.DataFrame([{"Property": c.get("name"), "Rent": c.get("rent"), "Notes": c.get("notes")} for c in rg_]),
+                             use_container_width=True, hide_index=True)
+            if rth_:
+                st.markdown('<div class="gold-header">Townhouse Comps</div>', unsafe_allow_html=True)
+                st.dataframe(pd.DataFrame([{"Property": c.get("name"), "Rent": c.get("rent"), "Notes": c.get("notes")} for c in rth_]),
+                             use_container_width=True, hide_index=True)
+            if rcomps_:
+                st.markdown('<div class="gold-header">Full Comp Detail</div>', unsafe_allow_html=True)
+                st.dataframe(pd.DataFrame([{
+                    "Property": c.get("name"), "Type": c.get("comp_type"),
+                    "Built": c.get("year_built"), "Units": c.get("units"),
+                    "Occ": _pct(c.get("occupancy")), "Mkt Rent": _v(c.get("total_market"), "$"),
+                    "Avg SF": c.get("avg_sf"),
+                } for c in rcomps_]), use_container_width=True, hide_index=True)
+            if not rg_ and not rth_ and not rcomps_:
+                st.info("No rent comp data extracted.")
 
-    with tab5:
-        col_a, col_b = st.columns(2)
-        with col_a:
-            st.markdown('<div class="gold-header">Property Tax Detail</div>', unsafe_allow_html=True)
-            for label, val in [
-                ("Parcel ID", tax_.get("parcel_id")), ("Assessed Value", _v(tax_.get("assessed_value"), "$")),
-                ("Millage — City", tax_.get("millage_city")), ("Millage — County", tax_.get("millage_county")),
-                ("Total Millage", tax_.get("millage_total")), ("Ad Valorem Tax", _v(tax_.get("tax_base"), "$")),
-                ("Solid Waste Fee", _v(tax_.get("solid_waste_fee"), "$")), ("Total Tax Bill", _v(tax_.get("total_tax"), "$")),
-            ]:
-                st.markdown(f"**{label}:** {val or 'N/A'}")
-        with col_b:
-            st.markdown('<div class="gold-header">Tax Abatement Program</div>', unsafe_allow_html=True)
-            for label, val in [
-                ("Program", tax_.get("abatement_program")), ("Abatement %", _pct(tax_.get('abatement_pct'))),
-                ("Term", tax_.get("abatement_term_note")), ("AMI Requirement", f"{tax_.get('ami_pct') or 'N/A'}% AMI"),
-                ("Max Allowable Rent", _v(tax_.get("max_allowable_rent"), "$")),
-                ("Avg In-Place Rent", _v(tax_.get("avg_inplace_rent"), "$")),
-                ("Headroom/Unit", _v(tax_.get("rent_headroom"), "$")),
-                ("Annual Tax Savings", _v(tax_.get("abatement_annual_savings"), "$")),
-            ]:
-                st.markdown(f"**{label}:** {val or 'N/A'}")
+        with tab4:
+            fin_ = data.get("financials") or {}
+            periods_ = fin_.get("periods") or []
+            inc_     = fin_.get("income_lines") or []
+            exp_     = fin_.get("expense_lines") or []
+            noi_     = fin_.get("noi") or {}
+            if periods_ and (inc_ or exp_):
+                import pandas as pd
+                rows = []
+                for line in inc_ + exp_:
+                    row = {"Line Item": line.get("item")}
+                    for p in periods_:
+                        row[p] = _v(line.get("values", {}).get(p), "$")
+                    rows.append(row)
+                if noi_:
+                    row = {"Line Item": "NET OPERATING INCOME"}
+                    for p in periods_:
+                        row[p] = _v(noi_.get(p), "$")
+                    rows.append(row)
+                st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+            else:
+                st.info("No financial data extracted.")
 
-    with tab6:
-        demo_ = data.get("demographics") or {}
-        col_a, col_b = st.columns(2)
-        with col_a:
-            st.markdown('<div class="gold-header">3-Mile Radius</div>', unsafe_allow_html=True)
-            for label, val in [
-                ("Population (2025)", _v(demo_.get("pop_3mi"), "n")),
-                ("Population (2030)", _v(demo_.get("pop_2030_3mi"), "n")),
-                ("Pop. Growth (5-yr)", demo_.get("pop_growth_3mi")),
-                ("Median HH Income", _v(demo_.get("median_income_3mi"), "$")),
-                ("Income 2030 Proj.", _v(demo_.get("median_income_2030_3mi"), "$")),
-                ("Income Growth", demo_.get("income_growth_3mi")),
-                ("Renter-Occupied", demo_.get("renter_pct_3mi")),
-                ("College Educated", demo_.get("college_pct_3mi")),
-                ("White-Collar", demo_.get("white_collar_pct_3mi")),
-            ]:
-                st.markdown(f"**{label}:** {val or 'N/A'}")
-        with col_b:
-            st.markdown('<div class="gold-header">5-Mile Radius</div>', unsafe_allow_html=True)
-            for label, val in [
-                ("Population (2025)", _v(demo_.get("pop_5mi"), "n")),
-                ("Population (2030)", _v(demo_.get("pop_2030_5mi"), "n")),
-                ("Pop. Growth (5-yr)", demo_.get("pop_growth_5mi")),
-                ("Median HH Income", _v(demo_.get("median_income_5mi"), "$")),
-                ("Income 2030 Proj.", _v(demo_.get("median_income_2030_5mi"), "$")),
-                ("Income Growth", demo_.get("income_growth_5mi")),
-                ("Renter-Occupied", demo_.get("renter_pct_5mi")),
-                ("College Educated", demo_.get("college_pct_5mi")),
-                ("White-Collar", demo_.get("white_collar_pct_5mi")),
-            ]:
-                st.markdown(f"**{label}:** {val or 'N/A'}")
-        employers_ = demo_.get("employers") or []
-        if employers_:
+        with tab5:
+            tax_ = data.get("tax") or {}
             import pandas as pd
-            st.markdown('<div class="gold-header">Major Employers</div>', unsafe_allow_html=True)
-            st.dataframe(pd.DataFrame(employers_), use_container_width=True, hide_index=True)
+            rows = [(k.replace("_"," ").title(), v) for k, v in tax_.items() if v and k != "abatement_program"]
+            if rows:
+                st.markdown('<div class="gold-header">Property Tax Detail</div>', unsafe_allow_html=True)
+                st.dataframe(pd.DataFrame(rows, columns=["Field","Value"]), use_container_width=True, hide_index=True)
+            if tax_.get("abatement_program"):
+                st.markdown('<div class="gold-header">Tax Abatement Program</div>', unsafe_allow_html=True)
+                st.info(tax_["abatement_program"])
+            if not rows and not tax_.get("abatement_program"):
+                st.info("No tax data extracted.")
 
-    with tab7:
-        fin_i_ = data.get("financing") or {}
-        afford_i = data.get("affordability") or {}
-        insur_i = data.get("insurance") or {}
-        mgmt_i = data.get("management") or {}
-        repl_i = data.get("replacement_cost") or {}
-        st.markdown(f"**Offering Type:** {fin_i_.get('offering_type') or 'N/A'}  &nbsp;|&nbsp;  **Debt Contact:** {fin_i_.get('debt_contact') or 'N/A'}", unsafe_allow_html=True)
-        if fin_i_.get("notes"): st.markdown(f"*{fin_i_['notes']}*")
-        st.markdown("")
-        nf_i  = fin_i_.get("new_financing") or {}
-        asd_i = fin_i_.get("assumable_debt") or {}
-        col1, col2 = st.columns(2)
-        with col1:
-            st.markdown('<div class="gold-header">New Financing</div>', unsafe_allow_html=True)
-            for label, val in [
-                ("Loan Type", nf_i.get("loan_type")), ("Lender", nf_i.get("lender")),
-                ("Loan Amount", _v(nf_i.get("loan_amount"), "$")), ("LTV", _pct(nf_i.get('loan_to_value'))),
-                ("Interest Rate", _pct(nf_i.get('interest_rate'))), ("Rate Type", nf_i.get("rate_type")),
-                ("Loan Term", nf_i.get("loan_term_years")), ("Amortization", nf_i.get("amortization_years")),
-                ("Interest Only", nf_i.get("interest_only_period")), ("DSCR", nf_i.get("dscr")),
-                ("Recourse", nf_i.get("recourse")), ("Notes", nf_i.get("notes")),
-            ]:
-                st.markdown(f"**{label}:** {val or 'N/A'}")
-        with col2:
-            st.markdown('<div class="gold-header">Assumable Debt</div>', unsafe_allow_html=True)
-            for label, val in [
-                ("Loan Type", asd_i.get("loan_type")), ("Lender", asd_i.get("lender")),
-                ("Loan Amount", _v(asd_i.get("loan_amount"), "$")), ("LTV", _pct(asd_i.get('loan_to_value'))),
-                ("Interest Rate", _pct(asd_i.get('interest_rate'))), ("Rate Type", asd_i.get("rate_type")),
-                ("Origination Date", asd_i.get("origination_date")), ("Maturity Date", asd_i.get("maturity_date")),
-                ("Monthly Payment", _v(asd_i.get("monthly_payment"), "$")),
-                ("Annual Debt Svc", _v(asd_i.get("annual_debt_service"), "$")),
-                ("DSCR", asd_i.get("dscr")), ("Prepayment Penalty", asd_i.get("prepayment_penalty")),
-                ("Recourse", asd_i.get("recourse")), ("Notes", asd_i.get("notes")),
-            ]:
-                st.markdown(f"**{label}:** {val or 'N/A'}")
-            st.markdown('<div class="gold-header">Insurance</div>', unsafe_allow_html=True)
-            for label, val in [
-                ("Carrier", insur_i.get("carrier")), ("Annual Premium", _v(insur_i.get("annual_premium"), "$")),
-                ("Per Unit/Year", _v(insur_i.get("per_unit"), "$")), ("Quote Source", insur_i.get("quote_source")),
-            ]:
-                st.markdown(f"**{label}:** {val or 'N/A'}")
-            st.markdown('<div class="gold-header">Management</div>', unsafe_allow_html=True)
-            for label, val in [
-                ("Fee %", _pct(mgmt_i.get('fee_pct'), ' of EGI')),
-                ("Annual Fee", _v(mgmt_i.get("fee_annual"), "$")),
-                ("Per Unit", _v(mgmt_i.get("fee_per_unit"), "$")),
-                ("Current Manager", mgmt_i.get("current_manager")),
-                ("Proposed Manager", mgmt_i.get("proposed_manager")),
-            ]:
-                st.markdown(f"**{label}:** {val or 'N/A'}")
+        with tab6:
+            demo_ = data.get("demographics") or {}
+            import pandas as pd
+            cols_d = ["population_3mi","population_5mi","hh_income_3mi","hh_income_5mi",
+                      "median_age","renter_pct","college_pct","white_collar"]
+            demo_rows = [(k.replace("_"," ").title(), demo_.get(k)) for k in cols_d if demo_.get(k)]
+            if demo_rows:
+                st.dataframe(pd.DataFrame(demo_rows, columns=["Metric","Value"]), use_container_width=True, hide_index=True)
+            else:
+                st.info("No demographics data extracted.")
 
-    with tab8:
-        flags_ = data.get("flags") or []
-        if flags_:
-            cat_css = {"Warning": "flag-warn", "Opportunity": "flag-good",
-                       "Info": "flag-info", "Verify": "flag-verify"}
-            for f in flags_:
-                cat = f.get("category", "Info")
-                css = cat_css.get(cat, "flag-info")
-                icon = {"Warning": "⚠️", "Opportunity": "✅", "Verify": "🔍", "Info": "ℹ️"}.get(cat, "•")
-                st.markdown(f"""
-                <div class="{css}">
-                  <div class="flag-title">{icon} [{cat}] {f.get('title','')}</div>
-                  <div class="flag-body">{f.get('detail','')}</div>
-                </div>""", unsafe_allow_html=True)
-        else:
-            st.info("No flags generated.")
+        with tab7:
+            fin_i_ = data.get("financing") or {}
+            nf_i_  = fin_i_.get("new_financing")  or {}
+            asd_i_ = fin_i_.get("assumable_debt") or {}
+            import pandas as pd
+            rows_f = []
+            if asd_i_.get("lender"):
+                rows_f += [
+                    ("Type",          "Assumable Debt"),
+                    ("Lender",        asd_i_.get("lender")),
+                    ("Loan Amount",   _v(asd_i_.get("loan_amount"), "$")),
+                    ("Interest Rate", _pct(asd_i_.get("interest_rate"))),
+                    ("Rate Type",     asd_i_.get("rate_type")),
+                    ("IO Period",     asd_i_.get("interest_only_period")),
+                    ("Maturity Date", asd_i_.get("maturity_date")),
+                ]
+            if nf_i_.get("lender") or nf_i_.get("loan_type"):
+                rows_f += [
+                    ("Type",          "New Financing"),
+                    ("Lender",        nf_i_.get("lender")),
+                    ("Loan Amount",   _v(nf_i_.get("loan_amount"), "$")),
+                    ("Interest Rate", _pct(nf_i_.get("interest_rate"))),
+                    ("LTV",           _pct(nf_i_.get("loan_to_value"))),
+                    ("IO Period",     nf_i_.get("interest_only_period")),
+                ]
+            if rows_f:
+                st.dataframe(pd.DataFrame([(k,v) for k,v in rows_f if v],
+                             columns=["Field","Value"]), use_container_width=True, hide_index=True)
+            else:
+                st.info(f"Offering type: {fin_i_.get('offering_type') or 'Not specified'}")
+
+        with tab8:
+            flags_ = data.get("flags") or []
+            if flags_:
+                for fl in flags_:
+                    cat  = (fl.get("category") or "").lower()
+                    cls  = "flag-warn"   if cat in ("warning","caution","risk") else \
+                           "flag-good"   if cat in ("opportunity","upside") else \
+                           "flag-verify" if cat == "verify" else "flag-info"
+                    icon = "⚠️" if cls=="flag-warn" else "\u2705" if cls=="flag-good" else "\U0001f50d" if cls=="flag-verify" else "\u2139️"
+                    st.markdown(f"""
+<div class="{cls}">
+  <div class="flag-title">{icon} &nbsp;{fl.get('title','')}</div>
+  <div class="flag-body">{fl.get('detail','')}</div>
+</div>""", unsafe_allow_html=True)
+            else:
+                st.info("No underwriting flags extracted.")
+
+        st.markdown("</div>", unsafe_allow_html=True)
