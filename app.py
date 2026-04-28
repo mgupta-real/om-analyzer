@@ -308,14 +308,15 @@ SCHEMA:
     "rent_headroom": null, "units_compliant": null, "pct_compliant": null
   },
   "demographics": {
-    "pop_3mi": null, "pop_5mi": null, "pop_growth_3mi": null, "pop_growth_5mi": null,
-    "pop_2030_3mi": null, "pop_2030_5mi": null,
-    "median_income_3mi": null, "median_income_5mi": null,
-    "median_income_2030_3mi": null, "median_income_2030_5mi": null,
-    "income_growth_3mi": null, "income_growth_5mi": null,
-    "renter_pct_3mi": null, "renter_pct_5mi": null,
-    "college_pct_3mi": null, "college_pct_5mi": null,
-    "white_collar_pct_3mi": null, "white_collar_pct_5mi": null,
+    "pop_1mi": null, "pop_3mi": null, "pop_5mi": null,
+    "pop_growth_1mi": null, "pop_growth_3mi": null, "pop_growth_5mi": null,
+    "pop_2030_1mi": null, "pop_2030_3mi": null, "pop_2030_5mi": null,
+    "median_income_1mi": null, "median_income_3mi": null, "median_income_5mi": null,
+    "median_income_2030_1mi": null, "median_income_2030_3mi": null, "median_income_2030_5mi": null,
+    "income_growth_1mi": null, "income_growth_3mi": null, "income_growth_5mi": null,
+    "renter_pct_1mi": null, "renter_pct_3mi": null, "renter_pct_5mi": null,
+    "college_pct_1mi": null, "college_pct_3mi": null, "college_pct_5mi": null,
+    "white_collar_pct_1mi": null, "white_collar_pct_3mi": null, "white_collar_pct_5mi": null,
     "home_value": null, "home_value_area": null,
     "crime": null, "school_district": null, "elementary": null,
     "middle": null, "high_school": null,
@@ -490,8 +491,9 @@ CRITICAL EXTRACTION RULES:
     Also set per_unit = gross_replacement_per_unit and total = gross_replacement_total.
     If no breakdown exists, populate just per_unit, per_sf, total, source, notes.
 
-15. DEMOGRAPHICS: Extract 3-mile and 5-mile data separately. Never mix them.
-    If demographic data is not in the OM, set all demographic fields to null.
+15. DEMOGRAPHICS: Extract 1-mile, 3-mile, and 5-mile data separately. Never mix them.
+    If a radius is not present in the OM, set its fields to null.
+    If demographic data is not in the OM at all, set all demographic fields to null.
 
 16. Extract every number that exists anywhere in the OM. Do not skip any table or data page.
 
@@ -1314,48 +1316,49 @@ def build_excel(d: dict, filename: str) -> bytes:
     # ══════════════════════════════════════════════════════════════════════════
     ws3 = wb.create_sheet("Demographics")
     ws3.sheet_view.showGridLines = False
-    for col, w in {"A":38,"B":24,"C":24,"D":16,"E":16,"F":42}.items():
+    for col, w in {"A":38,"B":20,"C":20,"D":20,"E":16,"F":16,"G":36}.items():
         ws3.column_dimensions[col].width = w
 
     r = 1
-    r = _cover(ws3, r, f"DEMOGRAPHICS & MARKET OVERVIEW  |  {prop}", subtitle, n=6)
+    r = _cover(ws3, r, f"DEMOGRAPHICS & MARKET OVERVIEW  |  {prop}", subtitle, n=7)
 
     # ── A. Population & Income ────────────────────────────────────────────────
-    r = _sec(ws3, r, "A.  POPULATION & INCOME DEMOGRAPHICS", n=6)
-    has_demo = any(demo.get(k) for k in ["pop_3mi","pop_5mi","median_income_3mi"])
+    r = _sec(ws3, r, "A.  POPULATION & INCOME DEMOGRAPHICS", n=7)
+    has_demo = any(demo.get(k) for k in ["pop_1mi","pop_3mi","pop_5mi","median_income_1mi","median_income_3mi"])
     if not has_demo:
-        _fr(ws3, r, 6, C_WARN)
-        _sc(ws3, r, 1, "Detailed 3-mile / 5-mile radius demographic data not provided in this OM. Source independently from CoStar, Esri, or census.gov.",
+        _fr(ws3, r, 7, C_WARN)
+        _sc(ws3, r, 1, "Detailed 1-mile / 3-mile / 5-mile radius demographic data not provided in this OM. Source independently from CoStar, Esri, or census.gov.",
             bg=C_WARN, fg=C_LABEL, size=9, bold=True, wrap=True)
         ws3.row_dimensions[r].height = 30; r += 1; r = _sp(ws3, r)
 
-    r = _thdr(ws3, r, ["Metric","3-Mile Radius","5-Mile Radius","Notes"], n=6)
-    for i, (metric, v3, v5, note) in enumerate([
-        ("Population (2025)",        _v(demo.get("pop_3mi"),"n"),  _v(demo.get("pop_5mi"),"n"),  ""),
-        ("Population (2030 Proj.)",  _v(demo.get("pop_2030_3mi"),"n"), _v(demo.get("pop_2030_5mi"),"n"), ""),
-        ("Population Growth (5-yr)", demo.get("pop_growth_3mi") or "—", demo.get("pop_growth_5mi") or "—", ""),
-        ("Median HH Income (2025)",  _v(demo.get("median_income_3mi"),"$"), _v(demo.get("median_income_5mi"),"$"), ""),
-        ("Median HH Income (2030)",  _v(demo.get("median_income_2030_3mi"),"$"), _v(demo.get("median_income_2030_5mi"),"$"), ""),
-        ("Income Growth (5-yr)",     demo.get("income_growth_3mi") or "—", demo.get("income_growth_5mi") or "—", ""),
-        ("Renter-Occupied Units",    demo.get("renter_pct_3mi") or "—", demo.get("renter_pct_5mi") or "—", ""),
-        ("Bachelor's Degree+",       demo.get("college_pct_3mi") or "—", demo.get("college_pct_5mi") or "—", ""),
-        ("White-Collar Workers",     demo.get("white_collar_pct_3mi") or "—", demo.get("white_collar_pct_5mi") or "—", ""),
-        ("Avg Home Value",           _v(demo.get("home_value"),"$"), "—", ""),
+    r = _thdr(ws3, r, ["Metric","1-Mile Radius","3-Mile Radius","5-Mile Radius","Notes"], n=7)
+    for i, (metric, v1, v3, v5, note) in enumerate([
+        ("Population (2025)",        _v(demo.get("pop_1mi"),"n"),  _v(demo.get("pop_3mi"),"n"),  _v(demo.get("pop_5mi"),"n"),  ""),
+        ("Population (2030 Proj.)",  _v(demo.get("pop_2030_1mi"),"n"), _v(demo.get("pop_2030_3mi"),"n"), _v(demo.get("pop_2030_5mi"),"n"), ""),
+        ("Population Growth (5-yr)", demo.get("pop_growth_1mi") or "—", demo.get("pop_growth_3mi") or "—", demo.get("pop_growth_5mi") or "—", ""),
+        ("Median HH Income (2025)",  _v(demo.get("median_income_1mi"),"$"), _v(demo.get("median_income_3mi"),"$"), _v(demo.get("median_income_5mi"),"$"), ""),
+        ("Median HH Income (2030)",  _v(demo.get("median_income_2030_1mi"),"$"), _v(demo.get("median_income_2030_3mi"),"$"), _v(demo.get("median_income_2030_5mi"),"$"), ""),
+        ("Income Growth (5-yr)",     demo.get("income_growth_1mi") or "—", demo.get("income_growth_3mi") or "—", demo.get("income_growth_5mi") or "—", ""),
+        ("Renter-Occupied Units",    demo.get("renter_pct_1mi") or "—", demo.get("renter_pct_3mi") or "—", demo.get("renter_pct_5mi") or "—", ""),
+        ("Bachelor's Degree+",       demo.get("college_pct_1mi") or "—", demo.get("college_pct_3mi") or "—", demo.get("college_pct_5mi") or "—", ""),
+        ("White-Collar Workers",     demo.get("white_collar_pct_1mi") or "—", demo.get("white_collar_pct_3mi") or "—", demo.get("white_collar_pct_5mi") or "—", ""),
+        ("Avg Home Value",           "—", _v(demo.get("home_value"),"$"), "—", ""),
     ]):
         bg = C_ALT if bool(i % 2) else C_WHITE
-        _fr(ws3, r, 6, bg)
+        _fr(ws3, r, 7, bg)
         _sc(ws3, r, 1, metric, bold=True, fg=C_LABEL, bg=bg, size=9)
-        _sc(ws3, r, 2, v3, fg=C_BLUE_IN, bg=bg, size=9, ha="right")
-        _sc(ws3, r, 3, v5, fg=C_BLUE_IN, bg=bg, size=9, ha="right")
-        _sc(ws3, r, 4, note, fg=C_BODY, bg=bg, size=9, wrap=True)
-        ws3.cell(row=r, column=5).fill = PatternFill("solid", fgColor=bg)
+        _sc(ws3, r, 2, v1, fg=C_BLUE_IN, bg=bg, size=9, ha="right")
+        _sc(ws3, r, 3, v3, fg=C_BLUE_IN, bg=bg, size=9, ha="right")
+        _sc(ws3, r, 4, v5, fg=C_BLUE_IN, bg=bg, size=9, ha="right")
+        _sc(ws3, r, 5, note, fg=C_BODY, bg=bg, size=9, wrap=True)
         ws3.cell(row=r, column=6).fill = PatternFill("solid", fgColor=bg)
+        ws3.cell(row=r, column=7).fill = PatternFill("solid", fgColor=bg)
         ws3.row_dimensions[r].height = 16; r += 1
     r = _sp(ws3, r)
 
     # ── B. Affordability ──────────────────────────────────────────────────────
-    r = _sec(ws3, r, "B.  AFFORDABILITY & RENT GROWTH RUNWAY", n=6)
-    r = _thdr(ws3, r, ["Metric","2025 (3-Mile)","2030 Proj. (3-Mile)","Notes"], n=6)
+    r = _sec(ws3, r, "B.  AFFORDABILITY & RENT GROWTH RUNWAY", n=7)
+    r = _thdr(ws3, r, ["Metric","2025 (3-Mile)","2030 Proj. (3-Mile)","Notes"], n=7)
     for i, (metric, v25, v30, note) in enumerate([
         ("Current In-Place Rent",          _v(afford.get("current_rent"),"$"), "—", "Subject effective rent"),
         ("Avg HH Income",                  _v(afford.get("avg_hh_income_3mi"),"$"), _v(afford.get("avg_hh_income_2030_3mi"),"$"), ""),
@@ -1364,7 +1367,7 @@ def build_excel(d: dict, filename: str) -> bytes:
         ("Income-to-Rent Ratio",           afford.get("income_to_rent_ratio") or "—", "—", ""),
     ]):
         bg = C_ALT if bool(i % 2) else C_WHITE
-        _fr(ws3, r, 6, bg)
+        _fr(ws3, r, 7, bg)
         _sc(ws3, r, 1, metric, bold=True, fg=C_LABEL, bg=bg, size=9)
         _sc(ws3, r, 2, v25, fg=C_BLUE_IN, bg=bg, size=9, ha="right")
         _sc(ws3, r, 3, v30, fg=C_BLUE_IN, bg=bg, size=9, ha="right")
@@ -1375,40 +1378,40 @@ def build_excel(d: dict, filename: str) -> bytes:
     r = _sp(ws3, r)
 
     # ── C. Schools & Crime ────────────────────────────────────────────────────
-    r = _sec(ws3, r, "C.  SCHOOLS, CRIME & QUALITY OF LIFE", n=6)
-    r = _shdr(ws3, r, "Assigned Schools  (source: greatschools.org)", n=6)
+    r = _sec(ws3, r, "C.  SCHOOLS, CRIME & QUALITY OF LIFE", n=7)
+    r = _shdr(ws3, r, "Assigned Schools  (source: greatschools.org)", n=7)
     for i, (k, v) in enumerate([
         ("School District", demo.get("school_district") or "Not provided — verify via district map"),
         ("Elementary",      demo.get("elementary") or "Not provided — verify via district map"),
         ("Middle School",   demo.get("middle") or "Not provided — verify via district map"),
         ("High School",     demo.get("high_school") or "Not provided — verify via district map"),
     ]):
-        r = _kv(ws3, r, k, v, alt=bool(i % 2), n=6)
-    r = _shdr(ws3, r, "Crime  (source: crimegrade.org)", n=6)
-    r = _kv(ws3, r, "Crime Data", demo.get("crime") or "Not provided in OM — source independently at crimegrade.org", n=6)
+        r = _kv(ws3, r, k, v, alt=bool(i % 2), n=7)
+    r = _shdr(ws3, r, "Crime  (source: crimegrade.org)", n=7)
+    r = _kv(ws3, r, "Crime Data", demo.get("crime") or "Not provided in OM — source independently at crimegrade.org", n=7)
     r = _sp(ws3, r)
 
     # ── D. Major Employers ────────────────────────────────────────────────────
     employers = demo.get("employers") or []
     if employers:
-        r = _sec(ws3, r, "D.  MAJOR EMPLOYERS & ECONOMIC DRIVERS", n=6)
-        r = _thdr(ws3, r, ["Employer / Institution","Drive Time","Employees","Sector","Notes"], n=6)
+        r = _sec(ws3, r, "D.  MAJOR EMPLOYERS & ECONOMIC DRIVERS", n=7)
+        r = _thdr(ws3, r, ["Employer / Institution","Drive Time","Employees","Sector","Notes"], n=7)
         for i, e in enumerate(employers):
             r = _drow(ws3, r, [
                 e.get("name","—"), e.get("drive") or "—", e.get("employees") or "—",
                 e.get("sector") or "—", e.get("notes") or "—",
-            ], alt=bool(i % 2), als=["left","center","center","left","left"], h=22, n=6)
+            ], alt=bool(i % 2), als=["left","center","center","left","left"], h=22, n=7)
         r = _sp(ws3, r)
 
     # ── E. Market Overview ────────────────────────────────────────────────────
-    r = _sec(ws3, r, "E.  MARKET & SUBMARKET OVERVIEW", n=6)
+    r = _sec(ws3, r, "E.  MARKET & SUBMARKET OVERVIEW", n=7)
     if mkt.get("market_summary"):
-        r = _shdr(ws3, r, "Market Narrative", n=6)
-        _fr(ws3, r, 6, C_WHITE)
+        r = _shdr(ws3, r, "Market Narrative", n=7)
+        _fr(ws3, r, 7, C_WHITE)
         _sc(ws3, r, 1, mkt["market_summary"], bg=C_WHITE, fg=C_BODY, size=9, wrap=True)
         ws3.row_dimensions[r].height = 45; r += 1; r = _sp(ws3, r)
 
-    r = _shdr(ws3, r, "Submarket Metrics", n=6)
+    r = _shdr(ws3, r, "Submarket Metrics", n=7)
     for i, (k, v) in enumerate([
         ("Submarket",            mkt.get("submarket")),
         ("Sub. Occupancy",       mkt.get("sub_occupancy")),
@@ -1419,28 +1422,28 @@ def build_excel(d: dict, filename: str) -> bytes:
         ("Absorption",           mkt.get("absorption")),
         ("Investment Volume",    mkt.get("investment_vol")),
     ]):
-        if v: r = _kv(ws3, r, k, v, alt=bool(i % 2), n=6)
+        if v: r = _kv(ws3, r, k, v, alt=bool(i % 2), n=7)
 
     devs = mkt.get("major_developments") or []
     if devs and any(d.get("name") for d in devs):
         r = _sp(ws3, r)
-        r = _shdr(ws3, r, "Major Economic Developments", n=6)
-        r = _thdr(ws3, r, ["Development","Description","Est. Cost","Jobs","Timeline"], n=6)
+        r = _shdr(ws3, r, "Major Economic Developments", n=7)
+        r = _thdr(ws3, r, ["Development","Description","Est. Cost","Jobs","Timeline"], n=7)
         for i, dev in enumerate(devs):
             if dev.get("name"):
                 r = _drow(ws3, r, [
                     dev.get("name","—"), dev.get("description") or "—",
                     dev.get("cost") or "—", dev.get("jobs") or "—",
                     dev.get("timeline") or "—",
-                ], alt=bool(i % 2), als=["left","left","right","center","left"], h=25, n=6)
+                ], alt=bool(i % 2), als=["left","left","right","center","left"], h=25, n=7)
     r = _sp(ws3, r)
 
     # ── F. Additional Income ──────────────────────────────────────────────────
     add_inc = inv.get("additional_income") or []
     if add_inc:
-        r = _sec(ws3, r, "F.  ADDITIONAL INCOME", n=6)
+        r = _sec(ws3, r, "F.  ADDITIONAL INCOME", n=7)
         r = _thdr(ws3, r, ["Income Item","Category","Fee/Unit/Mo","Occ %",
-                            "Monthly Income","Current Annual","Pro Forma Annual","Calculation Detail"], n=6)
+                            "Monthly Income","Current Annual","Pro Forma Annual","Calculation Detail"], n=7)
         for i, inc in enumerate(add_inc):
             r = _drow(ws3, r, [
                 inc.get("name") or "—", inc.get("category") or "—",
@@ -1450,27 +1453,27 @@ def build_excel(d: dict, filename: str) -> bytes:
                 _v(inc.get("current_annual"), "$") if inc.get("current_annual") else "—",
                 _v(inc.get("proforma_annual"), "$") if inc.get("proforma_annual") else "—",
                 inc.get("calculation_detail") or inc.get("notes") or "—",
-            ], alt=bool(i % 2), n=6,
+            ], alt=bool(i % 2), n=7,
                als=["left","left","right","center","right","right","right","left"])
         r = _sp(ws3, r)
 
     # ── G. Utilities ──────────────────────────────────────────────────────────
-    r = _sec(ws3, r, "G.  UTILITY INFORMATION", n=6)
+    r = _sec(ws3, r, "G.  UTILITY INFORMATION", n=7)
     if utils_:
-        r = _thdr(ws3, r, ["Utility","Billing Method","Paid By","Reimbursement","Annual Income","Notes"], n=6)
+        r = _thdr(ws3, r, ["Utility","Billing Method","Paid By","Reimbursement","Annual Income","Notes"], n=7)
         for i, u in enumerate(utils_):
             r = _drow(ws3, r, [
                 u.get("name","—"), u.get("method") or "—", u.get("paid_by") or "—",
                 u.get("reimbursement") or "N/A",
                 _v(u.get("annual_income"), "$"), u.get("notes") or "—",
-            ], alt=bool(i % 2), als=["left","center","center","left","right","left"], n=6)
+            ], alt=bool(i % 2), als=["left","center","center","left","right","left"], n=7)
     else:
-        r = _kv(ws3, r, "Note", "No utility data found in OM.", n=6)
+        r = _kv(ws3, r, "Note", "No utility data found in OM.", n=7)
     r = _sp(ws3, r)
 
     # ── H. Site Info ──────────────────────────────────────────────────────────
-    r = _sec(ws3, r, "H.  SITE & CONSTRUCTION INFORMATION", n=6)
-    r = _shdr(ws3, r, "Physical Plant", n=6)
+    r = _sec(ws3, r, "H.  SITE & CONSTRUCTION INFORMATION", n=7)
+    r = _shdr(ws3, r, "Physical Plant", n=7)
     for i, (k, v) in enumerate([
         ("Roof / Age",     f"{site.get('roof') or 'N/A'}  —  {site.get('roof_age') or 'N/A'}"),
         ("Exterior",       site.get("exterior")),
@@ -1483,8 +1486,8 @@ def build_excel(d: dict, filename: str) -> bytes:
         ("Life Safety",    site.get("life_safety") or "Verify — not specified"),
         ("Construction",   site.get("notes")),
     ]):
-        if v: r = _kv(ws3, r, k, v, alt=bool(i % 2), n=6)
-    r = _shdr(ws3, r, "Parking & Site Features", n=6)
+        if v: r = _kv(ws3, r, k, v, alt=bool(i % 2), n=7)
+    r = _shdr(ws3, r, "Parking & Site Features", n=7)
     for i, (k, v) in enumerate([
         ("Open Spaces",  _v(site.get("parking_open"), "n")),
         ("Covered",      _v(site.get("parking_covered"), "n")),
@@ -1493,11 +1496,11 @@ def build_excel(d: dict, filename: str) -> bytes:
         ("Pet Yards",    site.get("pet_yards") or "N/A"),
         ("Storage",      site.get("storage") or "N/A"),
     ]):
-        r = _kv(ws3, r, k, v, alt=bool(i % 2), n=6)
+        r = _kv(ws3, r, k, v, alt=bool(i % 2), n=7)
     r = _sp(ws3, r)
 
     # Disclaimer
-    _fr(ws3, r, 6, C_ALT)
+    _fr(ws3, r, 7, C_ALT)
     _sc(ws3, r, 1, "AI-generated. Internal use only. Verify all figures independently. Powered by Anthropic Claude.",
         bg=C_ALT, fg="FF888880", size=8, italic=True)
     ws3.row_dimensions[r].height = 13
@@ -1553,7 +1556,7 @@ with right_col:
   <div class="rv-bullet"><div class="rv-bullet-dot"></div><div class="rv-bullet-txt">Sale comparables with buyer/seller</div></div>
   <hr class="rv-divider">
   <div class="rv-panel-heading">Tab 3 — Demographics</div>
-  <div class="rv-bullet"><div class="rv-bullet-dot"></div><div class="rv-bullet-txt">Population &amp; income (3-mi / 5-mi)</div></div>
+  <div class="rv-bullet"><div class="rv-bullet-dot"></div><div class="rv-bullet-txt">Population &amp; income (1-mi / 3-mi / 5-mi)</div></div>
   <div class="rv-bullet"><div class="rv-bullet-dot"></div><div class="rv-bullet-txt">Affordability analysis</div></div>
   <div class="rv-bullet"><div class="rv-bullet-dot"></div><div class="rv-bullet-txt">Schools, crime &amp; quality of life</div></div>
   <div class="rv-bullet"><div class="rv-bullet-dot"></div><div class="rv-bullet-txt">Major employers &amp; developments</div></div>
