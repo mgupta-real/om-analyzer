@@ -577,6 +577,20 @@ def _v(val, fmt=None, suffix="", default="N/A"):
         except: return str(val)
     return f"{val}{suffix}"
 
+def _pct(val, suffix="", default="N/A"):
+    """Format a percentage that may be stored as decimal (0.0464) or whole (4.64).
+    Rule: if abs(val) <= 2.0, treat as decimal proportion and multiply by 100."""
+    if val is None or val == "": return default
+    try:
+        f = float(val)
+        if abs(f) <= 2.0:
+            f = f * 100
+        result = f"{f:.2f}%"
+        return result + suffix if suffix else result
+    except:
+        s = str(val).strip()
+        return s if s.endswith("%") else f"{s}%"
+
 def _psf(val):
     """Safe PSF formatter — returns '—' for None/zero/non-numeric."""
     if val is None or val == "" or val == "N/A": return "—"
