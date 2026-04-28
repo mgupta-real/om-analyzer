@@ -45,20 +45,20 @@ section[data-testid="stSidebar"] { display: none !important; }
 }
 .rv-right-panel {
     width: 380px; flex-shrink: 0; background: #091420;
-    border-left: 1px solid #1A2E42; padding: 28px 20px;
+    border-left: 1px solid #1A2E42; padding: 36px 28px;
 }
 .rv-panel-heading {
-    font-size: 11px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase;
-    color: #1DC9A4; margin-bottom: 10px; margin-top: 20px;
+    font-size: 13px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase;
+    color: #1DC9A4; margin-bottom: 12px; margin-top: 28px;
 }
 .rv-panel-heading:first-child { margin-top: 0; }
-.rv-bullet { display: flex; align-items: flex-start; gap: 8px; margin-bottom: 7px; }
-.rv-bullet-dot { width: 5px; height: 5px; border-radius: 50%; background: #1DC9A4; margin-top: 5px; flex-shrink: 0; }
-.rv-bullet-txt { font-size: 12px; color: #4A7090; line-height: 1.5; }
-.rv-brokers { font-size: 11px; color: #2A4860; line-height: 1.8; margin-top: 4px; }
-.rv-meta { font-size: 11px; color: #2A4860; margin-top: 5px; }
-.rv-meta span { color: #4A7090; }
-.rv-divider { border: none; border-top: 1px solid #152030; margin: 14px 0; }
+.rv-bullet { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 10px; }
+.rv-bullet-dot { width: 6px; height: 6px; border-radius: 50%; background: #1DC9A4; margin-top: 6px; flex-shrink: 0; }
+.rv-bullet-txt { font-size: 14px; color: #5A8FAA; line-height: 1.6; }
+.rv-brokers { font-size: 13px; color: #3A6080; line-height: 2.0; margin-top: 6px; }
+.rv-meta { font-size: 13px; color: #3A6080; margin-top: 7px; }
+.rv-meta span { color: #5A8FAA; }
+.rv-divider { border: none; border-top: 1px solid #152030; margin: 20px 0; }
 
 /* Section label with extending line — like Rent Roll */
 .rv-section-label-wrap {
