@@ -22,58 +22,64 @@ html, body, [class*="css"], .stApp, .main {
 }
 section[data-testid="stSidebar"] { display: none !important; }
 .rv-navbar {
-    background: #0A1520; border-bottom: 2px solid #1E3148;
-    padding: 0 36px; height: 80px;
+    background: #0B1929; border-bottom: 1px solid #1E3148;
+    padding: 0 40px; height: 96px;
     display: flex; align-items: center; justify-content: space-between;
     position: sticky; top: 0; z-index: 999;
 }
-.rv-logo-block { display: flex; align-items: center; gap: 16px; }
+.rv-logo-block { display: flex; align-items: center; gap: 18px; }
 .rv-logo-icon {
-    width: 56px; height: 56px; background: #1DC9A4; border-radius: 14px;
+    width: 66px; height: 66px; background: #1DC9A4; border-radius: 16px;
     display: flex; align-items: center; justify-content: center;
-    font-weight: 800; font-size: 20px; color: #0D1B2A; flex-shrink: 0;
+    font-weight: 800; font-size: 22px; color: #0D1B2A; flex-shrink: 0;
 }
 .rv-logo-text { display: flex; flex-direction: column; }
-.rv-logo-title { font-size: 26px; font-weight: 700; color: #FFFFFF; line-height: 1.2; }
-.rv-logo-sub { font-size: 11px; font-weight: 500; color: #5A8FAA; letter-spacing: 0.1em; text-transform: uppercase; margin-top: 3px; }
+.rv-logo-title { font-size: 28px; font-weight: 700; color: #FFFFFF; line-height: 1.2; }
+.rv-logo-sub { font-size: 11px; font-weight: 500; color: #5A8FAA; letter-spacing: 0.12em; text-transform: uppercase; margin-top: 5px; }
 .rv-nav-right { display: flex; align-items: center; gap: 20px; }
-.rv-version { font-size: 12px; color: #4A6A80; }
+.rv-version { font-size: 12px; color: #3A5A70; }
 .rv-claude-badge {
     background: transparent; border: 1.5px solid #1DC9A4; color: #1DC9A4;
-    border-radius: 20px; padding: 6px 16px; font-size: 12px; font-weight: 700;
-    display: flex; align-items: center; gap: 6px;
+    border-radius: 20px; padding: 7px 18px; font-size: 12px; font-weight: 700;
+    letter-spacing: 0.05em; display: flex; align-items: center; gap: 6px;
 }
 .rv-right-panel {
-    width: 300px; flex-shrink: 0; background: #0A1520;
-    border-left: 1px solid #1E3148; padding: 32px 22px;
+    width: 252px; flex-shrink: 0; background: #091420;
+    border-left: 1px solid #1A2E42; padding: 28px 20px;
 }
 .rv-panel-heading {
-    font-size: 11px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase;
-    color: #1DC9A4; margin-bottom: 10px; margin-top: 22px;
+    font-size: 10px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase;
+    color: #1DC9A4; margin-bottom: 9px; margin-top: 18px;
 }
 .rv-panel-heading:first-child { margin-top: 0; }
-.rv-bullet { display: flex; align-items: flex-start; gap: 8px; margin-bottom: 7px; }
-.rv-bullet-dot { width: 5px; height: 5px; border-radius: 50%; background: #1DC9A4; margin-top: 6px; flex-shrink: 0; }
-.rv-bullet-txt { font-size: 12px; color: #7A9AB8; line-height: 1.5; }
-.rv-brokers { font-size: 11px; color: #4A6A80; line-height: 1.8; margin-top: 4px; }
-.rv-meta { font-size: 11px; color: #4A6A80; margin-top: 5px; }
-.rv-meta span { color: #8AA8C0; }
-.rv-divider { border: none; border-top: 1px solid #1A2E42; margin: 18px 0; }
+.rv-bullet { display: flex; align-items: flex-start; gap: 7px; margin-bottom: 6px; }
+.rv-bullet-dot { width: 4px; height: 4px; border-radius: 50%; background: #1DC9A4; margin-top: 5px; flex-shrink: 0; }
+.rv-bullet-txt { font-size: 11px; color: #4A7090; line-height: 1.4; }
+.rv-brokers { font-size: 10px; color: #2A4860; line-height: 1.8; margin-top: 4px; }
+.rv-meta { font-size: 10px; color: #2A4860; margin-top: 4px; }
+.rv-meta span { color: #4A7090; }
+.rv-divider { border: none; border-top: 1px solid #152030; margin: 14px 0; }
+
+/* Section label with extending line — like Rent Roll */
+.rv-section-label-wrap {
+    display: flex; align-items: center; gap: 14px; margin-bottom: 18px; margin-top: 0;
+}
 .rv-section-label {
-    font-size: 11px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase;
-    color: #1DC9A4; margin-bottom: 14px; margin-top: 32px;
+    font-size: 11px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase;
+    color: #1DC9A4; white-space: nowrap; flex-shrink: 0;
 }
-.rv-section-label:first-child { margin-top: 0; }
+.rv-section-label-line { flex: 1; height: 1px; background: #1A2E42; }
+
 .rv-upload-card {
-    background: #0F2133; border: 1px solid #1E3148; border-radius: 14px;
-    padding: 32px 36px 24px; margin-bottom: 14px;
+    background: #0F2438; border: 1px solid #1A3250; border-radius: 14px;
+    padding: 32px 34px 26px; margin-bottom: 10px;
 }
-.rv-upload-title { font-size: 22px; font-weight: 700; color: #FFFFFF; margin-bottom: 10px; }
-.rv-upload-sub { font-size: 13px; color: #5A8FAA; }
-.rv-steps { display: flex; gap: 14px; margin-top: 14px; }
-.rv-step { flex: 1; background: #0F2133; border: 1px solid #1E3148; border-radius: 12px; padding: 20px 22px; }
-.rv-step-num { font-size: 11px; font-weight: 700; color: #1DC9A4; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 8px; }
-.rv-step-txt { font-size: 13px; color: #C0D0E0; line-height: 1.5; }
+.rv-upload-title { font-size: 22px; font-weight: 700; color: #FFFFFF; margin-bottom: 8px; }
+.rv-upload-sub { font-size: 13px; color: #4A7090; }
+.rv-steps { display: flex; gap: 10px; margin-top: 0; }
+.rv-step { flex: 1; background: #0F2133; border: 1px solid #1A3250; border-radius: 10px; padding: 18px 20px; }
+.rv-step-num { font-size: 10px; font-weight: 700; color: #1DC9A4; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 6px; }
+.rv-step-txt { font-size: 12px; color: #C0D0E0; line-height: 1.5; }
 .rv-file-info {
     background: #0F2133; border: 1px solid #1E3148; border-radius: 8px;
     padding: 10px 16px; font-size: 13px; color: #5A8FAA; margin-bottom: 12px;
@@ -86,16 +92,18 @@ section[data-testid="stSidebar"] { display: none !important; }
 .rv-success-icon { font-size: 22px; }
 .rv-success-text { font-size: 14px; color: #C0D0E0; }
 .rv-success-text b { color: #1DC9A4; }
+
+/* File uploader — fully dark, no white */
 .stFileUploader > div,
 .stFileUploader > div > div,
 [data-testid="stFileUploadDropzone"] {
-    background: #0F2133 !important;
-    border: 1.5px dashed #1DC9A4 !important;
+    background: #0B1E30 !important;
+    border: 1.5px dashed #2A5070 !important;
     border-radius: 12px !important;
-    padding: 24px 32px !important;
+    padding: 20px 28px !important;
 }
-.stFileUploader * { color: #8AA8C0 !important; }
-.stFileUploader small { color: #4A6A80 !important; }
+.stFileUploader * { color: #6A9AB8 !important; background: transparent !important; }
+.stFileUploader small, .stFileUploader span { color: #2A4860 !important; }
 [data-testid="stFileUploadDropzone"] > div { background: transparent !important; border: none !important; }
 .stButton > button {
     background: #1DC9A4 !important; color: #0D1B2A !important; border: none !important;
@@ -1496,8 +1504,11 @@ with right_col:
 
 with main_col:
     st.markdown("""
-<div style="padding: 32px 40px 0;">
-  <div class="rv-section-label">Upload Offering Memorandum</div>
+<div style="padding: 36px 44px 0;">
+  <div class="rv-section-label-wrap">
+    <span class="rv-section-label">Upload Offering Memorandum</span>
+    <div class="rv-section-label-line"></div>
+  </div>
   <div class="rv-upload-card">
     <div class="rv-upload-title">Upload Your OM</div>
     <div class="rv-upload-sub">Supports any broker PDF — JLL, CBRE, Marcus &amp; Millichap, Northmarq and more</div>
@@ -1519,7 +1530,7 @@ with main_col:
 
     if uploaded is None:
         st.markdown("""
-<div style="padding: 0 40px;">
+<div style="padding: 0 44px;">
 <div class="rv-steps">
   <div class="rv-step"><div class="rv-step-num">Step 1</div><div class="rv-step-txt">Upload a PDF using the box above</div></div>
   <div class="rv-step"><div class="rv-step-num">Step 2</div><div class="rv-step-txt">Click Analyze (takes 30–90 sec)</div></div>
@@ -1531,7 +1542,7 @@ with main_col:
 
     size_mb = uploaded.size / 1024 / 1024
     st.markdown(f"""
-<div style="padding: 0 40px;">
+<div style="padding: 0 44px;">
 <div class="rv-file-info">
   📄 &nbsp;<b>{uploaded.name}</b> &nbsp;—&nbsp; {size_mb:.1f} MB
 </div>
@@ -1580,7 +1591,7 @@ with main_col:
         broker_name = (data.get("broker")   or {}).get("name") or "Unknown broker"
 
         st.markdown(f"""
-<div style="padding: 0 40px;">
+<div style="padding: 0 44px;">
 <div class="rv-success">
   <div class="rv-success-icon">✅</div>
   <div class="rv-success-text">Report ready &nbsp;·&nbsp; <b>{prop_name}</b> &nbsp;·&nbsp; Broker: {broker_name}</div>
