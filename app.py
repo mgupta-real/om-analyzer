@@ -1370,7 +1370,7 @@ def build_excel(d: dict, filename: str) -> bytes:
         _sc(ws3, r, 3, v30, fg=C_BLUE_IN, bg=bg, size=9, ha="right")
         _sc(ws3, r, 4, note, fg=C_BODY, bg=bg, size=9)
         ws3.cell(row=r, column=5).fill = PatternFill("solid", fgColor=bg)
-        ws3.cell(row=r, column=6).fill = PatternFill("solid", fgColor=True)
+        ws3.cell(row=r, column=6).fill = PatternFill("solid", fgColor=bg)
         ws3.row_dimensions[r].height = 16; r += 1
     r = _sp(ws3, r)
 
