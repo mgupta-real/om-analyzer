@@ -23,18 +23,18 @@ html, body, [class*="css"], .stApp, .main {
 section[data-testid="stSidebar"] { display: none !important; }
 .rv-navbar {
     background: #0A1520; border-bottom: 2px solid #1E3148;
-    padding: 0 40px; height: 76px;
+    padding: 0 36px; height: 80px;
     display: flex; align-items: center; justify-content: space-between;
     position: sticky; top: 0; z-index: 999;
 }
 .rv-logo-block { display: flex; align-items: center; gap: 16px; }
 .rv-logo-icon {
-    width: 52px; height: 52px; background: #1DC9A4; border-radius: 14px;
+    width: 56px; height: 56px; background: #1DC9A4; border-radius: 14px;
     display: flex; align-items: center; justify-content: center;
-    font-weight: 800; font-size: 18px; color: #0D1B2A; flex-shrink: 0;
+    font-weight: 800; font-size: 20px; color: #0D1B2A; flex-shrink: 0;
 }
 .rv-logo-text { display: flex; flex-direction: column; }
-.rv-logo-title { font-size: 24px; font-weight: 700; color: #FFFFFF; line-height: 1.2; }
+.rv-logo-title { font-size: 26px; font-weight: 700; color: #FFFFFF; line-height: 1.2; }
 .rv-logo-sub { font-size: 11px; font-weight: 500; color: #5A8FAA; letter-spacing: 0.1em; text-transform: uppercase; margin-top: 3px; }
 .rv-nav-right { display: flex; align-items: center; gap: 20px; }
 .rv-version { font-size: 12px; color: #4A6A80; }
@@ -66,13 +66,13 @@ section[data-testid="stSidebar"] { display: none !important; }
 .rv-section-label:first-child { margin-top: 0; }
 .rv-upload-card {
     background: #0F2133; border: 1px solid #1E3148; border-radius: 14px;
-    padding: 28px 32px 18px; margin-bottom: 6px;
+    padding: 32px 36px 24px; margin-bottom: 14px;
 }
-.rv-upload-title { font-size: 20px; font-weight: 700; color: #FFFFFF; margin-bottom: 8px; }
+.rv-upload-title { font-size: 22px; font-weight: 700; color: #FFFFFF; margin-bottom: 10px; }
 .rv-upload-sub { font-size: 13px; color: #5A8FAA; }
-.rv-steps { display: flex; gap: 14px; margin-top: 18px; }
-.rv-step { flex: 1; background: #0F2133; border: 1px solid #1E3148; border-radius: 10px; padding: 16px 18px; }
-.rv-step-num { font-size: 11px; font-weight: 700; color: #1DC9A4; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 6px; }
+.rv-steps { display: flex; gap: 14px; margin-top: 14px; }
+.rv-step { flex: 1; background: #0F2133; border: 1px solid #1E3148; border-radius: 12px; padding: 20px 22px; }
+.rv-step-num { font-size: 11px; font-weight: 700; color: #1DC9A4; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 8px; }
 .rv-step-txt { font-size: 13px; color: #C0D0E0; line-height: 1.5; }
 .rv-file-info {
     background: #0F2133; border: 1px solid #1E3148; border-radius: 8px;
@@ -86,8 +86,17 @@ section[data-testid="stSidebar"] { display: none !important; }
 .rv-success-icon { font-size: 22px; }
 .rv-success-text { font-size: 14px; color: #C0D0E0; }
 .rv-success-text b { color: #1DC9A4; }
-.stFileUploader > div { background: #0F2133 !important; border: 1.5px dashed #1DC9A4 !important; border-radius: 10px !important; }
+.stFileUploader > div,
+.stFileUploader > div > div,
+[data-testid="stFileUploadDropzone"] {
+    background: #0F2133 !important;
+    border: 1.5px dashed #1DC9A4 !important;
+    border-radius: 12px !important;
+    padding: 24px 32px !important;
+}
 .stFileUploader * { color: #8AA8C0 !important; }
+.stFileUploader small { color: #4A6A80 !important; }
+[data-testid="stFileUploadDropzone"] > div { background: transparent !important; border: none !important; }
 .stButton > button {
     background: #1DC9A4 !important; color: #0D1B2A !important; border: none !important;
     border-radius: 8px !important; font-weight: 700 !important; font-size: 15px !important;
