@@ -29,12 +29,12 @@ section[data-testid="stSidebar"] { display: none !important; }
 }
 .rv-logo-block { display: flex; align-items: center; gap: 20px; }
 .rv-logo-icon {
-    width: 72px; height: 72px; background: #1DC9A4; border-radius: 18px;
+    width: 80px; height: 80px; background: #1DC9A4; border-radius: 20px;
     display: flex; align-items: center; justify-content: center;
-    font-weight: 800; font-size: 24px; color: #0D1B2A; flex-shrink: 0;
+    font-weight: 800; font-size: 28px; color: #0D1B2A; flex-shrink: 0;
 }
 .rv-logo-text { display: flex; flex-direction: column; }
-.rv-logo-title { font-size: 32px; font-weight: 700; color: #FFFFFF; line-height: 1.2; }
+.rv-logo-title { font-size: 36px; font-weight: 700; color: #FFFFFF; line-height: 1.2; }
 .rv-logo-sub { font-size: 12px; font-weight: 500; color: #5A8FAA; letter-spacing: 0.12em; text-transform: uppercase; margin-top: 6px; }
 .rv-nav-right { display: flex; align-items: center; gap: 20px; }
 .rv-version { font-size: 12px; color: #3A5A70; }
@@ -44,19 +44,19 @@ section[data-testid="stSidebar"] { display: none !important; }
     letter-spacing: 0.05em; display: flex; align-items: center; gap: 6px;
 }
 .rv-right-panel {
-    width: 320px; flex-shrink: 0; background: #091420;
+    width: 380px; flex-shrink: 0; background: #091420;
     border-left: 1px solid #1A2E42; padding: 28px 20px;
 }
 .rv-panel-heading {
-    font-size: 10px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase;
-    color: #1DC9A4; margin-bottom: 9px; margin-top: 18px;
+    font-size: 11px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase;
+    color: #1DC9A4; margin-bottom: 10px; margin-top: 20px;
 }
 .rv-panel-heading:first-child { margin-top: 0; }
-.rv-bullet { display: flex; align-items: flex-start; gap: 7px; margin-bottom: 6px; }
-.rv-bullet-dot { width: 4px; height: 4px; border-radius: 50%; background: #1DC9A4; margin-top: 5px; flex-shrink: 0; }
-.rv-bullet-txt { font-size: 11px; color: #4A7090; line-height: 1.4; }
-.rv-brokers { font-size: 10px; color: #2A4860; line-height: 1.8; margin-top: 4px; }
-.rv-meta { font-size: 10px; color: #2A4860; margin-top: 4px; }
+.rv-bullet { display: flex; align-items: flex-start; gap: 8px; margin-bottom: 7px; }
+.rv-bullet-dot { width: 5px; height: 5px; border-radius: 50%; background: #1DC9A4; margin-top: 5px; flex-shrink: 0; }
+.rv-bullet-txt { font-size: 12px; color: #4A7090; line-height: 1.5; }
+.rv-brokers { font-size: 11px; color: #2A4860; line-height: 1.8; margin-top: 4px; }
+.rv-meta { font-size: 11px; color: #2A4860; margin-top: 5px; }
 .rv-meta span { color: #4A7090; }
 .rv-divider { border: none; border-top: 1px solid #152030; margin: 14px 0; }
 
@@ -1483,7 +1483,7 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-main_col, right_col = st.columns([2.5, 1], gap="small")
+main_col, right_col = st.columns([2.2, 1], gap="small")
 
 with right_col:
     st.markdown("""
