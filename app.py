@@ -172,6 +172,9 @@ def extract_pdf_text(path: str) -> str:
         with pdfplumber.open(path) as pdf:
             for i, page in enumerate(pdf.pages):
                 text = page.extract_text(x_tolerance=3, y_tolerance=3) or ""
+                # ── OCR FALLBACK: if page is image-based, extract via pytesseract ──
+                text = _ocr_page_if_sparse(path, i, text)
+                # ─────────────────────────────────────────────────────────────────
                 if text:
                     pages.append(f"\n--- PAGE {i+1} ---\n{text}")
                 for tbl in (page.extract_tables() or []):
@@ -189,6 +192,37 @@ def extract_pdf_text(path: str) -> str:
             )
         except Exception as e:
             raise RuntimeError(f"Could not read PDF: {e}")
+
+
+def _ocr_page_if_sparse(path: str, page_index: int, existing_text: str) -> str:
+    """
+    OCR fallback for image-rendered pages (e.g. IPA/Marcus & Millichap financial tables).
+    Only fires when pdfplumber returns fewer than 150 characters for a page.
+    Silently skips if pymupdf or pytesseract are not installed.
+    """
+    OCR_THRESHOLD = 150
+    if len(existing_text.strip()) >= OCR_THRESHOLD:
+        return existing_text  # page has enough text — skip OCR entirely
+    try:
+        import fitz          # pymupdf
+        import pytesseract
+        from PIL import Image
+        doc = fitz.open(path)
+        page = doc[page_index]
+        # 3x scale ≈ 216 DPI — accurate enough for financial tables
+        pix = page.get_pixmap(matrix=fitz.Matrix(3, 3))
+        img = Image.open(io.BytesIO(pix.tobytes("png")))
+        doc.close()
+        # psm 6 = single uniform block of text, best for dense tables
+        ocr_text = pytesseract.image_to_string(img, config="--psm 6")
+        # Only use OCR result if it found more content than pdfplumber did
+        if len(ocr_text.strip()) > len(existing_text.strip()):
+            return ocr_text
+        return existing_text
+    except ImportError:
+        return existing_text   # pymupdf/pytesseract not installed — silently skip
+    except Exception:
+        return existing_text   # any render or OCR error — silently skip
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -477,10 +511,10 @@ CRITICAL EXTRACTION RULES:
 
 def analyze_om(pdf_text: str, api_key: str, progress_cb=None) -> dict:
     import httpx
-    MAX = 180_000
+    MAX = 250_000
     text = pdf_text[:MAX]
     if len(pdf_text) > MAX and progress_cb:
-        progress_cb("Large OM — using first 180K characters")
+        progress_cb("Large OM — using first 250K characters")
     if progress_cb:
         progress_cb("Sending to Claude AI for analysis...")
 
@@ -1336,7 +1370,7 @@ def build_excel(d: dict, filename: str) -> bytes:
         _sc(ws3, r, 3, v30, fg=C_BLUE_IN, bg=bg, size=9, ha="right")
         _sc(ws3, r, 4, note, fg=C_BODY, bg=bg, size=9)
         ws3.cell(row=r, column=5).fill = PatternFill("solid", fgColor=bg)
-        ws3.cell(row=r, column=6).fill = PatternFill("solid", fgColor=bg)
+        ws3.cell(row=r, column=6).fill = PatternFill("solid", fgColor=True)
         ws3.row_dimensions[r].height = 16; r += 1
     r = _sp(ws3, r)
 
