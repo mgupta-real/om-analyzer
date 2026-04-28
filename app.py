@@ -23,7 +23,7 @@ html, body, [class*="css"], .stApp, .main {
 section[data-testid="stSidebar"] { display: none !important; }
 .rv-navbar {
     background: #0B1929; border-bottom: 1px solid #1E3148;
-    padding: 0 48px; height: 110px;
+    padding: 0 48px; height: 130px;
     display: flex; align-items: center; justify-content: space-between;
     position: sticky; top: 0; z-index: 999;
 }
@@ -44,7 +44,7 @@ section[data-testid="stSidebar"] { display: none !important; }
     letter-spacing: 0.05em; display: flex; align-items: center; gap: 6px;
 }
 .rv-right-panel {
-    width: 252px; flex-shrink: 0; background: #091420;
+    width: 320px; flex-shrink: 0; background: #091420;
     border-left: 1px solid #1A2E42; padding: 28px 20px;
 }
 .rv-panel-heading {
@@ -1483,7 +1483,7 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-main_col, right_col = st.columns([3, 1], gap="small")
+main_col, right_col = st.columns([2.5, 1], gap="small")
 
 with right_col:
     st.markdown("""
