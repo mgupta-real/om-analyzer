@@ -458,20 +458,40 @@ def _v(val, fmt=None, suffix="", default="N/A"):
         try: return f"${float(val):,.0f}{suffix}"
         except: return str(val)
     if fmt == "%":
-        try: return f"{float(val):.1f}%"
+        try:
+            f = float(val)
+            # If value looks like a decimal proportion (≤ 1.5), multiply by 100
+            if abs(f) <= 1.5:
+                f = f * 100
+            return f"{f:.2f}%"
         except: return str(val)
     if fmt == "n":
         try: return f"{int(float(val)):,}{suffix}"
         except: return str(val)
     return f"{val}{suffix}"
 
-def _psf(val):
-    """Safe PSF formatter — returns '—' for None/zero/non-numeric."""
-    if val is None or val == "" or val == "N/A": return "—"
+def _pct(val, suffix="", default="N/A"):
+    """Format a percentage that may be stored as decimal (0.0464) or whole (4.64).
+    Rule: if abs(val) <= 2.0, treat as decimal proportion and multiply by 100."""
+    if val is None or val == "": return default
     try:
         f = float(val)
-        return "—" if f == 0 else f"${f:.2f}"
-    except: return "—"
+        if abs(f) <= 2.0:
+            f = f * 100
+        result = f"{f:.2f}%"
+        return result + suffix if suffix else result
+    except:
+        # Already a string like "4.64%" — return as-is
+        s = str(val).strip()
+        return s if s.endswith("%") else f"{s}%"
+
+def _psf(val, default="—"):
+    """Safe PSF formatter — returns '—' for None/zero/non-numeric."""
+    if val is None or val == "" or val == "N/A": return default
+    try:
+        f = float(val)
+        return default if f == 0 else f"${f:.2f}"
+    except: return default
 
 def _is_num(v):
     """Return True only if v is a real number (not None, '', 'N/A', 'n/a')."""
@@ -683,8 +703,8 @@ def build_excel(d: dict, filename: str) -> bytes:
         ra = ["left","left","center","center","right","right","right","right","right","right","right"]
         for i, u in enumerate(umix):
             r = _drow(ws1, r, [
-                u.get("type","—"), u.get("plan") or "—", _v(u.get("count"),"n"),
-                _v(u.get("pct"),"%"), _v(u.get("sf"),"n"),
+                _v(u.get("type","—")), u.get("plan") or "—", _v(u.get("count"),"n"),
+                _pct(u.get("pct")), _v(u.get("sf"),"n"),
                 _v(u.get("market_rent"),"$"), _psf(u.get('market_psf')),
                 _v(u.get("eff_rent"),"$"), _psf(u.get('eff_psf')),
                 _v(u.get("target_rent"),"$"), _v(u.get("upside"),"$"),
@@ -741,7 +761,7 @@ def build_excel(d: dict, filename: str) -> bytes:
         ("Exterior / Additional CapEx", _v(va.get("exterior_capex"), "$")),
         ("Monthly Rent Premium",        _v(va.get("monthly_premium"), "$")),
         ("Annual Rent Premium",         _v(va.get("annual_premium"), "$")),
-        ("Return on Investment",        f"{va.get('roi_pct') or 'N/A'}%"),
+        ("Return on Investment",        _pct(va.get('roi_pct'))),
         ("Value-Add Scope",             va.get("scope")),
     ]):
         r = _kv(ws1, r, k, v, alt=bool(i % 2))
@@ -872,7 +892,7 @@ def build_excel(d: dict, filename: str) -> bytes:
     r = _shdr(ws1, r, "Tax Abatement Program")
     for i, (k, v) in enumerate([
         ("Program",               tax.get("abatement_program")),
-        ("Abatement %",           f"{tax.get('abatement_pct') or 'N/A'}%"),
+        ("Abatement %",           _pct(tax.get('abatement_pct'))),
         ("Commitment Term",       tax.get("abatement_term_note")),
         ("AMI Requirement",       f"{tax.get('ami_pct') or 'N/A'}% of Area Median Income"),
         ("Annual Tax Savings",    _v(tax.get("abatement_annual_savings"), "$")),
@@ -934,7 +954,7 @@ def build_excel(d: dict, filename: str) -> bytes:
         r = _kv(ws1, r, k, v, alt=bool(i % 2))
     r = _shdr(ws1, r, "Property Management")
     for i, (k, v) in enumerate([
-        ("Management Fee %",   f"{mgmt.get('fee_pct') or 'N/A'}% of EGI"),
+        ("Management Fee %",   _pct(mgmt.get('fee_pct'), ' of EGI')),
         ("Annual Fee",         _v(mgmt.get("fee_annual"), "$")),
         ("Per Unit / Year",    _v(mgmt.get("fee_per_unit"), "$")),
         ("Current Manager",    mgmt.get("current_manager")),
@@ -979,8 +999,8 @@ def build_excel(d: dict, filename: str) -> bytes:
     if any(nf.get(k) for k in ["loan_type","lender","loan_to_value","interest_rate"]):
         r = _drow(ws1, r, [
             nf.get("loan_type") or "—", nf.get("lender") or "—",
-            _v(nf.get("loan_amount"), "$"), f"{nf.get('loan_to_value') or 'N/A'}%",
-            f"{nf.get('interest_rate') or 'N/A'}%", nf.get("rate_type") or "—",
+            _v(nf.get("loan_amount"), "$"), _pct(nf.get('loan_to_value')),
+            _pct(nf.get('interest_rate')), nf.get("rate_type") or "—",
             nf.get("loan_term_years") or "—", nf.get("amortization_years") or "—",
             nf.get("interest_only_period") or "—", nf.get("dscr") or "—",
             nf.get("recourse") or "—", nf.get("notes") or "—",
@@ -1001,8 +1021,8 @@ def build_excel(d: dict, filename: str) -> bytes:
     if any(asd.get(k) for k in ["loan_type","lender","loan_to_value","interest_rate"]):
         r = _drow(ws1, r, [
             asd.get("loan_type") or "—", asd.get("lender") or "—",
-            _v(asd.get("loan_amount"), "$"), f"{asd.get('loan_to_value') or 'N/A'}%",
-            f"{asd.get('interest_rate') or 'N/A'}%", asd.get("rate_type") or "—",
+            _v(asd.get("loan_amount"), "$"), _pct(asd.get('loan_to_value')),
+            _pct(asd.get('interest_rate')), asd.get("rate_type") or "—",
             asd.get("loan_term_years") or "—", asd.get("amortization_years") or "—",
             asd.get("interest_only_period") or "—",
             asd.get("origination_date") or "—", asd.get("maturity_date") or "—",
@@ -1081,7 +1101,7 @@ def build_excel(d: dict, filename: str) -> bytes:
             row_data = [name, c.get("comp_type") or comp_type_label,
                         _v(c.get("year_built")), c.get("distance") or "—",
                         _v(c.get("units"),"n") if c.get("units") else "—",
-                        _v(c.get("occupancy"),"%") if c.get("occupancy") else "—",
+                        _pct(c.get("occupancy")) if c.get("occupancy") else "—",
                         _v(rent_val,"$"), _v(c.get("total_eff") or rent_val,"$"),
                         _psf(c.get("total_market_psf") or c.get("total_eff_psf")),
                         vs, c.get("notes") or "—"]
@@ -1111,7 +1131,7 @@ def build_excel(d: dict, filename: str) -> bytes:
             r = _drow(ws2, r, [
                 rc.get("id","—"), rc.get("name","—"), rc.get("comp_type") or "—",
                 _v(rc.get("year_built")), rc.get("distance") or "—",
-                _v(rc.get("units"),"n"), _v(rc.get("occupancy"),"%"),
+                _v(rc.get("units"),"n"), _pct(rc.get("occupancy")),
                 _v(rc.get("total_market"),"$"), _v(rc.get("total_eff"),"$"),
                 _v(rc.get("avg_sf"),"n"), "—",
             ], alt=bool(i % 2), als=["center","left","center","center","center","center",
@@ -1473,9 +1493,9 @@ if st.button("🔍  Analyze Offering Memorandum", type="primary", use_container_
     m1, m2, m3, m4, m5, m6 = st.columns(6)
     with m1: st.metric("Units",       _v(pd_.get("units"), "n"))
     with m2: st.metric("Year Built",  _v(pd_.get("year_built")))
-    with m3: st.metric("Occupancy",   _v(pd_.get("occupancy_pct"), "%"))
+    with m3: st.metric("Occupancy",   _pct(pd_.get("occupancy_pct")))
     with m4: st.metric("Avg Rent",    _v(inv_.get("market_rent"), "$"))
-    with m5: st.metric("Reno ROI",    f"{va_.get('roi_pct') or 'N/A'}%")
+    with m5: st.metric("Reno ROI",    _pct(va_.get('roi_pct')))
     with m6: st.metric("Tax Savings", _v(tax_.get("abatement_annual_savings"), "$"))
 
     # ── Preview tabs ─────────────────────────────────────────────────────────
@@ -1514,7 +1534,7 @@ if st.button("🔍  Analyze Offering Memorandum", type="primary", use_container_
             st.metric("Annual Premium",  _v(va_.get("annual_premium"), "$"))
             st.metric("Monthly Premium", _v(va_.get("monthly_premium"), "$"))
         with col3:
-            st.metric("ROI",             f"{va_.get('roi_pct') or 'N/A'}%")
+            st.metric("ROI",             _pct(va_.get('roi_pct')))
             st.metric("Exterior CapEx",  _v(va_.get("exterior_capex"), "$"))
 
     with tab3:
@@ -1564,7 +1584,7 @@ if st.button("🔍  Analyze Offering Memorandum", type="primary", use_container_
         with col_b:
             st.markdown('<div class="gold-header">Tax Abatement Program</div>', unsafe_allow_html=True)
             for label, val in [
-                ("Program", tax_.get("abatement_program")), ("Abatement %", f"{tax_.get('abatement_pct') or 'N/A'}%"),
+                ("Program", tax_.get("abatement_program")), ("Abatement %", _pct(tax_.get('abatement_pct'))),
                 ("Term", tax_.get("abatement_term_note")), ("AMI Requirement", f"{tax_.get('ami_pct') or 'N/A'}% AMI"),
                 ("Max Allowable Rent", _v(tax_.get("max_allowable_rent"), "$")),
                 ("Avg In-Place Rent", _v(tax_.get("avg_inplace_rent"), "$")),
@@ -1626,8 +1646,8 @@ if st.button("🔍  Analyze Offering Memorandum", type="primary", use_container_
             st.markdown('<div class="gold-header">New Financing</div>', unsafe_allow_html=True)
             for label, val in [
                 ("Loan Type", nf_i.get("loan_type")), ("Lender", nf_i.get("lender")),
-                ("Loan Amount", _v(nf_i.get("loan_amount"), "$")), ("LTV", f"{nf_i.get('loan_to_value') or 'N/A'}%"),
-                ("Interest Rate", f"{nf_i.get('interest_rate') or 'N/A'}%"), ("Rate Type", nf_i.get("rate_type")),
+                ("Loan Amount", _v(nf_i.get("loan_amount"), "$")), ("LTV", _pct(nf_i.get('loan_to_value'))),
+                ("Interest Rate", _pct(nf_i.get('interest_rate'))), ("Rate Type", nf_i.get("rate_type")),
                 ("Loan Term", nf_i.get("loan_term_years")), ("Amortization", nf_i.get("amortization_years")),
                 ("Interest Only", nf_i.get("interest_only_period")), ("DSCR", nf_i.get("dscr")),
                 ("Recourse", nf_i.get("recourse")), ("Notes", nf_i.get("notes")),
@@ -1637,8 +1657,8 @@ if st.button("🔍  Analyze Offering Memorandum", type="primary", use_container_
             st.markdown('<div class="gold-header">Assumable Debt</div>', unsafe_allow_html=True)
             for label, val in [
                 ("Loan Type", asd_i.get("loan_type")), ("Lender", asd_i.get("lender")),
-                ("Loan Amount", _v(asd_i.get("loan_amount"), "$")), ("LTV", f"{asd_i.get('loan_to_value') or 'N/A'}%"),
-                ("Interest Rate", f"{asd_i.get('interest_rate') or 'N/A'}%"), ("Rate Type", asd_i.get("rate_type")),
+                ("Loan Amount", _v(asd_i.get("loan_amount"), "$")), ("LTV", _pct(asd_i.get('loan_to_value'))),
+                ("Interest Rate", _pct(asd_i.get('interest_rate'))), ("Rate Type", asd_i.get("rate_type")),
                 ("Origination Date", asd_i.get("origination_date")), ("Maturity Date", asd_i.get("maturity_date")),
                 ("Monthly Payment", _v(asd_i.get("monthly_payment"), "$")),
                 ("Annual Debt Svc", _v(asd_i.get("annual_debt_service"), "$")),
@@ -1654,7 +1674,7 @@ if st.button("🔍  Analyze Offering Memorandum", type="primary", use_container_
                 st.markdown(f"**{label}:** {val or 'N/A'}")
             st.markdown('<div class="gold-header">Management</div>', unsafe_allow_html=True)
             for label, val in [
-                ("Fee %", f"{mgmt_i.get('fee_pct') or 'N/A'}% of EGI"),
+                ("Fee %", _pct(mgmt_i.get('fee_pct'), ' of EGI')),
                 ("Annual Fee", _v(mgmt_i.get("fee_annual"), "$")),
                 ("Per Unit", _v(mgmt_i.get("fee_per_unit"), "$")),
                 ("Current Manager", mgmt_i.get("current_manager")),
