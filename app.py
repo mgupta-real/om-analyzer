@@ -841,8 +841,84 @@ def build_excel(d: dict, filename: str) -> bytes:
         r = _kv(ws1, r, "Note", "No unit mix data found.")
     r = _sp(ws1, r)
 
-    # ── C. Value-Add ──────────────────────────────────────────────────────────
-    r = _sec(ws1, r, "C.  PROPOSED VALUE-ADD BY FLOOR PLAN")
+    # ── C. Operating Statement ────────────────────────────────────────────────
+    periods   = fin.get("periods") or []
+    inc_lines = fin.get("income_lines") or []
+    exp_lines = fin.get("expense_lines") or []
+
+    if periods and (inc_lines or exp_lines):
+        p_all = periods[:7]  # support up to 7 columns (e.g. F-3/Current/2ndGen + Year2-5)
+        r = _sec(ws1, r, f"C.  OPERATING STATEMENT  ({'  ·  '.join(p_all)})")
+        r = _thdr(ws1, r, ["Line Item"] + p_all + ["Underwriting Notes"])
+        f6 = ["left"] + ["right"] * len(p_all) + ["left"]
+
+        def _fin_row(item):
+            vals = item.get("values") or {}
+            return [item.get("item", "—")] + [
+                _v(vals.get(p), "$") if vals.get(p) is not None else "—" for p in p_all
+            ] + [item.get("note") or ""]
+
+        # Track which total rows were already rendered inline to avoid duplicates
+        rendered_totals = set()
+
+        r = _shdr(ws1, r, "INCOME")
+        for i, item in enumerate(inc_lines):
+            name = (item.get("item") or "").lower()
+            if item.get("is_total"):
+                rendered_totals.add(name)
+                # "NOI before reserves" rows render as subtotal (light blue), not amber NOI
+                if "before reserve" in name or "pre reserve" in name:
+                    r = _subtrow(ws1, r, _fin_row(item))
+                else:
+                    r = _noirow(ws1, r, _fin_row(item))
+            elif item.get("is_subtotal"):
+                r = _subtrow(ws1, r, _fin_row(item))
+            else:
+                r = _drow(ws1, r, _fin_row(item), alt=bool(i % 2), als=f6)
+
+        r = _shdr(ws1, r, "EXPENSES")
+        for i, item in enumerate(exp_lines):
+            name = (item.get("item") or "").lower()
+            if item.get("is_total"):
+                rendered_totals.add(name)
+                # "Total expenses pre reserve" / "NOI before reserves" → subtotal
+                if "before reserve" in name or "pre reserve" in name:
+                    r = _subtrow(ws1, r, _fin_row(item))
+                else:
+                    r = _totrow(ws1, r, _fin_row(item))
+            elif item.get("is_subtotal"):
+                r = _subtrow(ws1, r, _fin_row(item))
+            else:
+                r = _drow(ws1, r, _fin_row(item), alt=bool(i % 2), als=f6)
+
+        # NOI — only render from fin.noi dict if not already rendered inline
+        noi_d = fin.get("noi") or {}
+        noi_already = any("net operating income" in t for t in rendered_totals)
+        if not noi_already and any(_is_num(noi_d.get(p)) for p in p_all):
+            r = _noirow(ws1, r, ["NET OPERATING INCOME"] + [
+                _v(noi_d.get(p), "$") if _is_num(noi_d.get(p)) else "—" for p in p_all
+            ] + [""])
+
+        # Capital reserves — only if numeric
+        capex_d = fin.get("capex") or {}
+        if any(_is_num(capex_d.get(p)) for p in p_all):
+            r = _drow(ws1, r, ["  Capital Reserves"] + [
+                _v(capex_d.get(p), "$") if _is_num(capex_d.get(p)) else "—" for p in p_all
+            ] + [""], als=f6)
+
+        # CFFO — only render if numeric values exist (guards against Mosby's "N/A" string)
+        cffo_d = fin.get("cffo") or {}
+        if any(_is_num(cffo_d.get(p)) for p in p_all):
+            r = _noirow(ws1, r, ["CASH FLOW FROM OPERATIONS"] + [
+                _v(cffo_d.get(p), "$") if _is_num(cffo_d.get(p)) else "—" for p in p_all
+            ] + [""])
+    else:
+        r = _sec(ws1, r, "C.  OPERATING STATEMENT")
+        r = _kv(ws1, r, "Note", "No financial data found in OM.")
+    r = _sp(ws1, r)
+
+    # ── D. Value-Add ──────────────────────────────────────────────────────────
+    r = _sec(ws1, r, "D.  PROPOSED VALUE-ADD BY FLOOR PLAN")
     plans = va.get("by_floor_plan") or []
     if plans:
         r = _thdr(ws1, r, ["Unit Type","Units","SF","In-Place Rent","In-Place PSF",
@@ -926,189 +1002,8 @@ def build_excel(d: dict, filename: str) -> bytes:
 
     r = _sp(ws1, r)
 
-    # ── D. Operating Statement ────────────────────────────────────────────────
-    periods   = fin.get("periods") or []
-    inc_lines = fin.get("income_lines") or []
-    exp_lines = fin.get("expense_lines") or []
-
-    if periods and (inc_lines or exp_lines):
-        p_all = periods[:7]  # support up to 7 columns (e.g. F-3/Current/2ndGen + Year2-5)
-        r = _sec(ws1, r, f"D.  OPERATING STATEMENT  ({'  ·  '.join(p_all)})")
-        r = _thdr(ws1, r, ["Line Item"] + p_all + ["Underwriting Notes"])
-        f6 = ["left"] + ["right"] * len(p_all) + ["left"]
-
-        def _fin_row(item):
-            vals = item.get("values") or {}
-            return [item.get("item", "—")] + [
-                _v(vals.get(p), "$") if vals.get(p) is not None else "—" for p in p_all
-            ] + [item.get("note") or ""]
-
-        # Track which total rows were already rendered inline to avoid duplicates
-        rendered_totals = set()
-
-        r = _shdr(ws1, r, "INCOME")
-        for i, item in enumerate(inc_lines):
-            name = (item.get("item") or "").lower()
-            if item.get("is_total"):
-                rendered_totals.add(name)
-                # "NOI before reserves" rows render as subtotal (light blue), not amber NOI
-                if "before reserve" in name or "pre reserve" in name:
-                    r = _subtrow(ws1, r, _fin_row(item))
-                else:
-                    r = _noirow(ws1, r, _fin_row(item))
-            elif item.get("is_subtotal"):
-                r = _subtrow(ws1, r, _fin_row(item))
-            else:
-                r = _drow(ws1, r, _fin_row(item), alt=bool(i % 2), als=f6)
-
-        r = _shdr(ws1, r, "EXPENSES")
-        for i, item in enumerate(exp_lines):
-            name = (item.get("item") or "").lower()
-            if item.get("is_total"):
-                rendered_totals.add(name)
-                # "Total expenses pre reserve" / "NOI before reserves" → subtotal
-                if "before reserve" in name or "pre reserve" in name:
-                    r = _subtrow(ws1, r, _fin_row(item))
-                else:
-                    r = _totrow(ws1, r, _fin_row(item))
-            elif item.get("is_subtotal"):
-                r = _subtrow(ws1, r, _fin_row(item))
-            else:
-                r = _drow(ws1, r, _fin_row(item), alt=bool(i % 2), als=f6)
-
-        # NOI — only render from fin.noi dict if not already rendered inline
-        noi_d = fin.get("noi") or {}
-        noi_already = any("net operating income" in t for t in rendered_totals)
-        if not noi_already and any(_is_num(noi_d.get(p)) for p in p_all):
-            r = _noirow(ws1, r, ["NET OPERATING INCOME"] + [
-                _v(noi_d.get(p), "$") if _is_num(noi_d.get(p)) else "—" for p in p_all
-            ] + [""])
-
-        # Capital reserves — only if numeric
-        capex_d = fin.get("capex") or {}
-        if any(_is_num(capex_d.get(p)) for p in p_all):
-            r = _drow(ws1, r, ["  Capital Reserves"] + [
-                _v(capex_d.get(p), "$") if _is_num(capex_d.get(p)) else "—" for p in p_all
-            ] + [""], als=f6)
-
-        # CFFO — only render if numeric values exist (guards against Mosby's "N/A" string)
-        cffo_d = fin.get("cffo") or {}
-        if any(_is_num(cffo_d.get(p)) for p in p_all):
-            r = _noirow(ws1, r, ["CASH FLOW FROM OPERATIONS"] + [
-                _v(cffo_d.get(p), "$") if _is_num(cffo_d.get(p)) else "—" for p in p_all
-            ] + [""])
-    else:
-        r = _sec(ws1, r, "D.  OPERATING STATEMENT")
-        r = _kv(ws1, r, "Note", "No financial analysis data found in OM.")
-    r = _sp(ws1, r)
-
-    # ── E. Tax ────────────────────────────────────────────────────────────────
-    r = _sec(ws1, r, "E.  PROPERTY TAX & TAX ABATEMENT")
-    r = _shdr(ws1, r, "Property Tax Detail")
-    for i, (k, v) in enumerate([
-        ("Parcel ID",             tax.get("parcel_id")),
-        ("Assessed Market Value", _v(tax.get("assessed_value"), "$")),
-        ("Millage — City",        tax.get("millage_city")),
-        ("Millage — County",      tax.get("millage_county")),
-        ("Total Millage Rate",    tax.get("millage_total")),
-        ("Ad Valorem Tax",        _v(tax.get("tax_base"), "$")),
-        ("Solid Waste / Fees",    _v(tax.get("solid_waste_fee"), "$")),
-        ("Total Annual Tax Bill", _v(tax.get("total_tax"), "$")),
-    ]):
-        r = _kv(ws1, r, k, v, alt=bool(i % 2))
-    r = _shdr(ws1, r, "Tax Abatement Program")
-    for i, (k, v) in enumerate([
-        ("Program",               tax.get("abatement_program")),
-        ("Abatement %",           f"{tax.get('abatement_pct') or 'N/A'}%"),
-        ("Commitment Term",       tax.get("abatement_term_note")),
-        ("AMI Requirement",       f"{tax.get('ami_pct') or 'N/A'}% of Area Median Income"),
-        ("Annual Tax Savings",    _v(tax.get("abatement_annual_savings"), "$")),
-        ("Max Allowable Rent",    _v(tax.get("max_allowable_rent"), "$")),
-        ("Avg In-Place Rent",     _v(tax.get("avg_inplace_rent"), "$")),
-        ("Headroom / Unit",       _v(tax.get("rent_headroom"), "$")),
-    ]):
-        r = _kv(ws1, r, k, v, alt=bool(i % 2))
-    r = _sp(ws1, r)
-
-    # ── F. Replacement Cost / Insurance / Management ──────────────────────────
-    r = _sec(ws1, r, "F.  REPLACEMENT COST  ·  INSURANCE  ·  MANAGEMENT")
-    r = _shdr(ws1, r, "Replacement Cost")
-    # If detailed breakdown exists (Grand Preserve style), render full table
-    has_detail = any(repl.get(k) for k in ["hard_cost_per_sf","land_per_unit","gross_replacement_per_unit"])
-    if has_detail:
-        repl_rows = [
-            ("Component",                "Per Unit",                                           "Per SF",                                               "Total"),
-            ("Land",                     _v(repl.get("land_per_unit"),"$"),                   "—",                                                    _v(repl.get("land_total"),"$")),
-            ("Hard Costs",               _v(repl.get("hard_cost_per_unit"),"$"),              _v(repl.get("hard_cost_per_sf"),"$"),                   _v(repl.get("hard_cost_total"),"$")),
-            ("Soft Costs",               _v(repl.get("soft_cost_per_unit"),"$"),              f"{repl.get('soft_cost_pct') or '—'}% of hard",         _v(repl.get("soft_cost_total"),"$")),
-        ]
-        r = _thdr(ws1, r, ["Component","Per Unit","Per SF","Total Cost"])
-        for i, row in enumerate(repl_rows[1:]):
-            r = _drow(ws1, r, list(row), alt=bool(i%2), als=["left","right","right","right"])
-        if repl.get("direct_replacement_per_unit"):
-            r = _subtrow(ws1, r, ["Direct Replacement Cost", _v(repl.get("direct_replacement_per_unit"),"$"), _v(repl.get("direct_replacement_per_sf"),"$"), _v(repl.get("direct_replacement_total"),"$")])
-        dev_rows = []
-        if repl.get("developer_fee_per_unit"):
-            dev_rows.append(("Developer Fee", _v(repl.get("developer_fee_per_unit"),"$"), f"{repl.get('developer_fee_pct') or '—'}% of project", _v(repl.get("developer_fee_total"),"$")))
-        if repl.get("gc_fee_per_unit"):
-            dev_rows.append(("GC Fee",        _v(repl.get("gc_fee_per_unit"),"$"), f"{repl.get('gc_fee_pct') or '—'}% of hard costs", _v(repl.get("gc_fee_total"),"$")))
-        for i, row in enumerate(dev_rows):
-            r = _drow(ws1, r, list(row), alt=bool(i%2), als=["left","right","right","right"])
-        if repl.get("gross_replacement_per_unit"):
-            r = _noirow(ws1, r, ["Gross Replacement Cost", _v(repl.get("gross_replacement_per_unit"),"$"), _v(repl.get("gross_replacement_per_sf"),"$"), _v(repl.get("gross_replacement_total"),"$")])
-        if repl.get("notes"):
-            r = _kv(ws1, r, "Notes", repl.get("notes"))
-    else:
-        for i, (k, v) in enumerate([
-            ("Cost Per Unit",     _v(repl.get("per_unit") or repl.get("gross_replacement_per_unit"), "$")),
-            ("Cost Per SF",       _v(repl.get("per_sf") or repl.get("gross_replacement_per_sf"), "$")),
-            ("Total Replacement", _v(repl.get("total") or repl.get("gross_replacement_total"), "$")),
-            ("Land Per Unit",     _v(repl.get("land_per_unit"), "$")),
-            ("Hard Cost Per SF",  _v(repl.get("hard_cost_per_sf"), "$")),
-            ("Soft Cost %",       f"{repl.get('soft_cost_pct') or 'N/A'}%"),
-            ("Source",            repl.get("source")),
-            ("Notes",             repl.get("notes")),
-        ]):
-            r = _kv(ws1, r, k, v, alt=bool(i % 2))
-    r = _shdr(ws1, r, "Insurance")
-    for i, (k, v) in enumerate([
-        ("Carrier / Provider", insur.get("carrier")),
-        ("Annual Premium",     _v(insur.get("annual_premium"), "$")),
-        ("Per Unit / Year",    _v(insur.get("per_unit"), "$")),
-        ("Quote Source",       insur.get("quote_source")),
-        ("Notes",              insur.get("notes")),
-    ]):
-        r = _kv(ws1, r, k, v, alt=bool(i % 2))
-    r = _shdr(ws1, r, "Property Management")
-    for i, (k, v) in enumerate([
-        ("Management Fee %",   f"{mgmt.get('fee_pct') or 'N/A'}% of EGI"),
-        ("Annual Fee",         _v(mgmt.get("fee_annual"), "$")),
-        ("Per Unit / Year",    _v(mgmt.get("fee_per_unit"), "$")),
-        ("Current Manager",    mgmt.get("current_manager")),
-        ("Proposed Manager",   mgmt.get("proposed_manager")),
-        ("Notes",              mgmt.get("notes")),
-    ]):
-        r = _kv(ws1, r, k, v, alt=bool(i % 2))
-    r = _sp(ws1, r)
-
-    # ── G. Affordability ──────────────────────────────────────────────────────
-    r = _sec(ws1, r, "G.  AFFORDABILITY & RENT GROWTH RUNWAY")
-    for i, (k, v) in enumerate([
-        ("Current In-Place Rent",             _v(afford.get("current_rent"), "$")),
-        ("Avg HH Income — 3-Mile (2025)",     _v(afford.get("avg_hh_income_3mi"), "$")),
-        ("Monthly Affordability @ 3× Rent",   _v(afford.get("monthly_affordability_3x"), "$")),
-        ("Rent Headroom (3-Mile, 2025)",       _v(afford.get("rent_headroom_3mi"), "$")),
-        ("Avg HH Income — 3-Mile (2030)",     _v(afford.get("avg_hh_income_2030_3mi"), "$")),
-        ("Monthly Affordability @ 3× (2030)", _v(afford.get("monthly_affordability_2030_3x"), "$")),
-        ("Rent Headroom (3-Mile, 2030)",       _v(afford.get("rent_headroom_2030_3mi"), "$")),
-        ("Income-to-Rent Ratio",              afford.get("income_to_rent_ratio")),
-        ("Notes",                             afford.get("notes")),
-    ]):
-        r = _kv(ws1, r, k, v, alt=bool(i % 2))
-    r = _sp(ws1, r)
-
-    # ── H. Financing ──────────────────────────────────────────────────────────
-    r = _sec(ws1, r, "H.  FINANCING & DEBT TERMS")
+    # ── E. Financing ──────────────────────────────────────────────────────────
+    r = _sec(ws1, r, "E.  FINANCING & DEBT TERMS")
     r = _shdr(ws1, r, "Offering & Contact")
     for i, (k, v) in enumerate([
         ("Offering Type", fin_i.get("offering_type")),
@@ -1167,8 +1062,8 @@ def build_excel(d: dict, filename: str) -> bytes:
         ws1.row_dimensions[r].height = 15; r += 1
     r = _sp(ws1, r)
 
-    # ── I. Underwriting Flags ─────────────────────────────────────────────────
-    r = _sec(ws1, r, "I.  UNDERWRITING FLAGS")
+    # ── F. Underwriting Flags ─────────────────────────────────────────────────
+    r = _sec(ws1, r, "F.  UNDERWRITING FLAGS")
     flag_bg = {"Warning": C_WARN, "Opportunity": C_GREEN_L, "Info": C_BLUE_L, "Verify": C_PURPLE_L}
     if flags:
         r = _thdr(ws1, r, ["Category", "Flag Title", "Detail"])
@@ -1183,6 +1078,95 @@ def build_excel(d: dict, filename: str) -> bytes:
             ws1.row_dimensions[r].height = 28; r += 1
     else:
         r = _kv(ws1, r, "Note", "No flags generated.")
+    r = _sp(ws1, r)
+
+    # ── G. Tax ────────────────────────────────────────────────────────────────
+    r = _sec(ws1, r, "G.  PROPERTY TAX & TAX ABATEMENT")
+    r = _shdr(ws1, r, "Property Tax Detail")
+    for i, (k, v) in enumerate([
+        ("Parcel ID",             tax.get("parcel_id")),
+        ("Assessed Market Value", _v(tax.get("assessed_value"), "$")),
+        ("Millage — City",        tax.get("millage_city")),
+        ("Millage — County",      tax.get("millage_county")),
+        ("Total Millage Rate",    tax.get("millage_total")),
+        ("Ad Valorem Tax",        _v(tax.get("tax_base"), "$")),
+        ("Solid Waste / Fees",    _v(tax.get("solid_waste_fee"), "$")),
+        ("Total Annual Tax Bill", _v(tax.get("total_tax"), "$")),
+    ]):
+        r = _kv(ws1, r, k, v, alt=bool(i % 2))
+    r = _shdr(ws1, r, "Tax Abatement Program")
+    for i, (k, v) in enumerate([
+        ("Program",               tax.get("abatement_program")),
+        ("Abatement %",           f"{tax.get('abatement_pct') or 'N/A'}%"),
+        ("Commitment Term",       tax.get("abatement_term_note")),
+        ("AMI Requirement",       f"{tax.get('ami_pct') or 'N/A'}% of Area Median Income"),
+        ("Annual Tax Savings",    _v(tax.get("abatement_annual_savings"), "$")),
+        ("Max Allowable Rent",    _v(tax.get("max_allowable_rent"), "$")),
+        ("Avg In-Place Rent",     _v(tax.get("avg_inplace_rent"), "$")),
+        ("Headroom / Unit",       _v(tax.get("rent_headroom"), "$")),
+    ]):
+        r = _kv(ws1, r, k, v, alt=bool(i % 2))
+    r = _sp(ws1, r)
+
+    # ── H. Replacement Cost / Insurance / Management ──────────────────────────
+    r = _sec(ws1, r, "H.  REPLACEMENT COST  ·  INSURANCE  ·  MANAGEMENT")
+    r = _shdr(ws1, r, "Replacement Cost")
+    # If detailed breakdown exists (Grand Preserve style), render full table
+    has_detail = any(repl.get(k) for k in ["hard_cost_per_sf","land_per_unit","gross_replacement_per_unit"])
+    if has_detail:
+        repl_rows = [
+            ("Component",                "Per Unit",                                           "Per SF",                                               "Total"),
+            ("Land",                     _v(repl.get("land_per_unit"),"$"),                   "—",                                                    _v(repl.get("land_total"),"$")),
+            ("Hard Costs",               _v(repl.get("hard_cost_per_unit"),"$"),              _v(repl.get("hard_cost_per_sf"),"$"),                   _v(repl.get("hard_cost_total"),"$")),
+            ("Soft Costs",               _v(repl.get("soft_cost_per_unit"),"$"),              f"{repl.get('soft_cost_pct') or '—'}% of hard",         _v(repl.get("soft_cost_total"),"$")),
+        ]
+        r = _thdr(ws1, r, ["Component","Per Unit","Per SF","Total Cost"])
+        for i, row in enumerate(repl_rows[1:]):
+            r = _drow(ws1, r, list(row), alt=bool(i%2), als=["left","right","right","right"])
+        if repl.get("direct_replacement_per_unit"):
+            r = _subtrow(ws1, r, ["Direct Replacement Cost", _v(repl.get("direct_replacement_per_unit"),"$"), _v(repl.get("direct_replacement_per_sf"),"$"), _v(repl.get("direct_replacement_total"),"$")])
+        dev_rows = []
+        if repl.get("developer_fee_per_unit"):
+            dev_rows.append(("Developer Fee", _v(repl.get("developer_fee_per_unit"),"$"), f"{repl.get('developer_fee_pct') or '—'}% of project", _v(repl.get("developer_fee_total"),"$")))
+        if repl.get("gc_fee_per_unit"):
+            dev_rows.append(("GC Fee",        _v(repl.get("gc_fee_per_unit"),"$"), f"{repl.get('gc_fee_pct') or '—'}% of hard costs", _v(repl.get("gc_fee_total"),"$")))
+        for i, row in enumerate(dev_rows):
+            r = _drow(ws1, r, list(row), alt=bool(i%2), als=["left","right","right","right"])
+        if repl.get("gross_replacement_per_unit"):
+            r = _noirow(ws1, r, ["Gross Replacement Cost", _v(repl.get("gross_replacement_per_unit"),"$"), _v(repl.get("gross_replacement_per_sf"),"$"), _v(repl.get("gross_replacement_total"),"$")])
+        if repl.get("notes"):
+            r = _kv(ws1, r, "Notes", repl.get("notes"))
+    else:
+        for i, (k, v) in enumerate([
+            ("Cost Per Unit",     _v(repl.get("per_unit") or repl.get("gross_replacement_per_unit"), "$")),
+            ("Cost Per SF",       _v(repl.get("per_sf") or repl.get("gross_replacement_per_sf"), "$")),
+            ("Total Replacement", _v(repl.get("total") or repl.get("gross_replacement_total"), "$")),
+            ("Land Per Unit",     _v(repl.get("land_per_unit"), "$")),
+            ("Hard Cost Per SF",  _v(repl.get("hard_cost_per_sf"), "$")),
+            ("Soft Cost %",       f"{repl.get('soft_cost_pct') or 'N/A'}%"),
+            ("Source",            repl.get("source")),
+            ("Notes",             repl.get("notes")),
+        ]):
+            r = _kv(ws1, r, k, v, alt=bool(i % 2))
+    r = _shdr(ws1, r, "Insurance")
+    for i, (k, v) in enumerate([
+        ("Carrier / Provider", insur.get("carrier")),
+        ("Annual Premium",     _v(insur.get("annual_premium"), "$")),
+        ("Per Unit / Year",    _v(insur.get("per_unit"), "$")),
+        ("Quote Source",       insur.get("quote_source")),
+        ("Notes",              insur.get("notes")),
+    ]):
+        r = _kv(ws1, r, k, v, alt=bool(i % 2))
+    r = _shdr(ws1, r, "Property Management")
+    for i, (k, v) in enumerate([
+        ("Management Fee %",   f"{mgmt.get('fee_pct') or 'N/A'}% of EGI"),
+        ("Annual Fee",         _v(mgmt.get("fee_annual"), "$")),
+        ("Per Unit / Year",    _v(mgmt.get("fee_per_unit"), "$")),
+        ("Current Manager",    mgmt.get("current_manager")),
+        ("Proposed Manager",   mgmt.get("proposed_manager")),
+        ("Notes",              mgmt.get("notes")),
+    ]):
+        r = _kv(ws1, r, k, v, alt=bool(i % 2))
     r = _sp(ws1, r)
 
     # Disclaimer
@@ -1376,57 +1360,10 @@ def build_excel(d: dict, filename: str) -> bytes:
     r = _kv(ws3, r, "Crime Data", demo.get("crime") or "Not provided in OM — source independently at crimegrade.org", n=6)
     r = _sp(ws3, r)
 
-    # ── D. Major Employers ────────────────────────────────────────────────────
-    employers = demo.get("employers") or []
-    if employers:
-        r = _sec(ws3, r, "D.  MAJOR EMPLOYERS & ECONOMIC DRIVERS", n=6)
-        r = _thdr(ws3, r, ["Employer / Institution","Drive Time","Employees","Sector","Notes"], n=6)
-        for i, e in enumerate(employers):
-            r = _drow(ws3, r, [
-                e.get("name","—"), e.get("drive") or "—", e.get("employees") or "—",
-                e.get("sector") or "—", e.get("notes") or "—",
-            ], alt=bool(i % 2), als=["left","center","center","left","left"], h=22, n=6)
-        r = _sp(ws3, r)
-
-    # ── E. Market Overview ────────────────────────────────────────────────────
-    r = _sec(ws3, r, "E.  MARKET & SUBMARKET OVERVIEW", n=6)
-    if mkt.get("market_summary"):
-        r = _shdr(ws3, r, "Market Narrative", n=6)
-        _fr(ws3, r, 6, C_WHITE)
-        _sc(ws3, r, 1, mkt["market_summary"], bg=C_WHITE, fg=C_BODY, size=9, wrap=True)
-        ws3.row_dimensions[r].height = 45; r += 1; r = _sp(ws3, r)
-
-    r = _shdr(ws3, r, "Submarket Metrics", n=6)
-    for i, (k, v) in enumerate([
-        ("Submarket",            mkt.get("submarket")),
-        ("Sub. Occupancy",       mkt.get("sub_occupancy")),
-        ("Sub. Avg Rent",        _v(mkt.get("sub_rent"), "$")),
-        ("Sub. Rent Growth",     mkt.get("sub_growth")),
-        ("Metro Inventory",      mkt.get("metro_inventory")),
-        ("Pipeline",             mkt.get("pipeline")),
-        ("Absorption",           mkt.get("absorption")),
-        ("Investment Volume",    mkt.get("investment_vol")),
-    ]):
-        if v: r = _kv(ws3, r, k, v, alt=bool(i % 2), n=6)
-
-    devs = mkt.get("major_developments") or []
-    if devs and any(d.get("name") for d in devs):
-        r = _sp(ws3, r)
-        r = _shdr(ws3, r, "Major Economic Developments", n=6)
-        r = _thdr(ws3, r, ["Development","Description","Est. Cost","Jobs","Timeline"], n=6)
-        for i, dev in enumerate(devs):
-            if dev.get("name"):
-                r = _drow(ws3, r, [
-                    dev.get("name","—"), dev.get("description") or "—",
-                    dev.get("cost") or "—", dev.get("jobs") or "—",
-                    dev.get("timeline") or "—",
-                ], alt=bool(i % 2), als=["left","left","right","center","left"], h=25, n=6)
-    r = _sp(ws3, r)
-
-    # ── F. Additional Income ──────────────────────────────────────────────────
+    # ── D. Additional Income ──────────────────────────────────────────────────
     add_inc = inv.get("additional_income") or []
     if add_inc:
-        r = _sec(ws3, r, "F.  ADDITIONAL INCOME", n=6)
+        r = _sec(ws3, r, "D.  ADDITIONAL INCOME", n=6)
         r = _thdr(ws3, r, ["Income Item","Category","Fee/Unit/Mo","Occ %",
                             "Monthly Income","Current Annual","Pro Forma Annual","Calculation Detail"], n=6)
         for i, inc in enumerate(add_inc):
@@ -1442,8 +1379,8 @@ def build_excel(d: dict, filename: str) -> bytes:
                als=["left","left","right","center","right","right","right","left"])
         r = _sp(ws3, r)
 
-    # ── G. Utilities ──────────────────────────────────────────────────────────
-    r = _sec(ws3, r, "G.  UTILITY INFORMATION", n=6)
+    # ── E. Utilities ──────────────────────────────────────────────────────────
+    r = _sec(ws3, r, "E.  UTILITY INFORMATION", n=6)
     if utils_:
         r = _thdr(ws3, r, ["Utility","Billing Method","Paid By","Reimbursement","Annual Income","Notes"], n=6)
         for i, u in enumerate(utils_):
@@ -1456,8 +1393,8 @@ def build_excel(d: dict, filename: str) -> bytes:
         r = _kv(ws3, r, "Note", "No utility data found in OM.", n=6)
     r = _sp(ws3, r)
 
-    # ── H. Site Info ──────────────────────────────────────────────────────────
-    r = _sec(ws3, r, "H.  SITE & CONSTRUCTION INFORMATION", n=6)
+    # ── F. Site Info ──────────────────────────────────────────────────────────
+    r = _sec(ws3, r, "F.  SITE & CONSTRUCTION INFORMATION", n=6)
     r = _shdr(ws3, r, "Physical Plant", n=6)
     for i, (k, v) in enumerate([
         ("Roof / Age",     f"{site.get('roof') or 'N/A'}  —  {site.get('roof_age') or 'N/A'}"),
