@@ -110,7 +110,9 @@ section[data-testid="stSidebar"] { display: none !important; }
 [data-testid="stCheckbox"] label *,
 [data-testid="stCheckbox"] > label,
 [data-testid="stCheckbox"] > label > div,
-[data-testid="stCheckbox"] > label > div * {
+[data-testid="stCheckbox"] > label > div *,
+[data-testid="stCheckbox"] [data-testid="stMarkdownContainer"],
+[data-testid="stCheckbox"] [data-testid="stMarkdownContainer"] * {
     background: transparent !important;
     background-color: transparent !important;
 }
@@ -123,10 +125,13 @@ section[data-testid="stSidebar"] { display: none !important; }
 }
 [data-testid="stCheckbox"] label p,
 [data-testid="stCheckbox"] label span,
-[data-testid="stCheckbox"] label div {
+[data-testid="stCheckbox"] label div,
+[data-testid="stCheckbox"] [data-testid="stMarkdownContainer"] p {
     font-size: 12px !important;
     color: #5A8FAA !important;
     line-height: 1.4 !important;
+    background: transparent !important;
+    background-color: transparent !important;
 }
 [data-testid="stCheckbox"] input:checked ~ div,
 [data-testid="stCheckbox"] input:checked + div {
