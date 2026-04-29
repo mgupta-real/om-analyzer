@@ -17,7 +17,7 @@ html, body, [class*="css"], .stApp, .main {
 }
 .block-container {
 padding-top: 0 !important; max-width: 1100px !important;
-padding-left: 1rem !important; padding-right: 1rem !important;
+padding-left: 0 !important; padding-right: 0 !important;
 background: #0D1B2A !important;
 }
 section[data-testid="stSidebar"] { display: none !important; }
