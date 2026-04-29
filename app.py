@@ -95,7 +95,52 @@ section[data-testid="stSidebar"] { display: none !important; }
 .rv-success-text { font-size: 14px; color: #C0D0E0; }
 .rv-success-text b { color: #1DC9A4; }
 
-/* Push right panel to screen edge */
+/* Checkboxes in right panel — native Streamlit styled dark */
+[data-testid="stCheckbox"] {
+    background: transparent !important;
+    padding: 2px 4px 2px 0 !important;
+    margin-bottom: 2px !important;
+}
+[data-testid="stCheckbox"] > label {
+    display: flex !important;
+    align-items: flex-start !important;
+    gap: 9px !important;
+    cursor: pointer !important;
+}
+[data-testid="stCheckbox"] p {
+    font-size: 13px !important;
+    color: #5A8FAA !important;
+    line-height: 1.45 !important;
+    margin: 0 !important;
+}
+[data-testid="stCheckbox"]:hover p { color: #8ABDD0 !important; }
+/* Checkbox box itself */
+[data-testid="stCheckbox"] [data-testid="stWidgetLabel"] { display: none !important; }
+[data-testid="stCheckbox"] > label > div:first-child {
+    width: 15px !important; height: 15px !important;
+    border: 1.5px solid #2A5070 !important;
+    border-radius: 3px !important;
+    background: #0B1E30 !important;
+    flex-shrink: 0 !important;
+    margin-top: 2px !important;
+}
+[data-testid="stCheckbox"] input:checked ~ div {
+    background: #1DC9A4 !important;
+    border-color: #1DC9A4 !important;
+}
+[data-testid="stCheckbox"] svg { color: #0D1B2A !important; }
+/* Divider between tab groups */
+.rv-cb-divider { border-top: 1px solid #152030; margin: 12px 0 10px; }
+/* Select/Deselect buttons */
+[data-testid="stHorizontalBlock"] [data-testid="stButton"] button {
+    background: #0F2133 !important;
+    border: 1px solid #1A3250 !important;
+    color: #1DC9A4 !important;
+    font-size: 11px !important;
+    font-weight: 600 !important;
+    padding: 5px 0 !important;
+    border-radius: 6px !important;
+}
 [data-testid="column"]:last-child {
     padding-right: 0 !important;
     margin-right: 0 !important;
@@ -747,7 +792,10 @@ def _cover(ws, row, line1, line2, n=14):
     return _sp(ws, row)
 
 
-def build_excel(d: dict, filename: str) -> bytes:
+def build_excel(d: dict, filename: str, sections: dict = None) -> bytes:
+    # Default all sections on if not provided
+    S = sections or {}
+    def _on(key): return S.get(key, True)
     date   = datetime.today().strftime("%B %d, %Y")
     prop   = (d.get("property") or {}).get("name") or "Property"
     broker = (d.get("broker") or {}).get("name") or "N/A"
@@ -801,383 +849,391 @@ def build_excel(d: dict, filename: str) -> bytes:
     r = 1
     r = _cover(ws1, r, f"MULTIFAMILY UNDERWRITING REPORT  ·  FINANCIALS", subtitle)
 
-    # ── A. Deal Summary ───────────────────────────────────────────────────────
-    r = _sec(ws1, r, "A.  DEAL SUMMARY & PROPERTY DETAILS")
-    agents = ", ".join(
-        a.get("name", str(a)) if isinstance(a, dict) else str(a)
-        for a in ((d.get("broker") or {}).get("agents") or [])
-    ) or "N/A"
-    for i, (k, v) in enumerate([
-        ("Property Name",      prop),
-        ("Address",            addr),
-        ("County / MSA",       f"{pd_.get('county') or 'N/A'}  ·  {pd_.get('msa') or 'N/A'}"),
-        ("Total Units",        _v(pd_.get("units"), "n")),
-        ("Year Built",         _v(pd_.get("year_built"))),
-        ("Net Rentable SF",    f"{_v(pd_.get('rentable_sf'), 'n')} SF  (Avg {_v(pd_.get('avg_unit_sf'), 'n')} SF/unit)"),
-        ("Buildings / Stories",f"{_v(pd_.get('buildings'), 'n')} buildings  ·  {_v(pd_.get('floors'))} stories"),
-        ("Land Area",          f"{_v(pd_.get('acres'))} acres  ({_v(pd_.get('density'))} units/acre)"),
-        ("Asset Class",        pd_.get("asset_class")),
-        ("Occupancy",          f"{_v(pd_.get('occupancy_pct'), '%')}  as of {pd_.get('occupancy_date') or 'N/A'}"),
-        ("Offering Type",      fin_i.get("offering_type")),
-        ("Broker / Agents",    f"{broker}  ·  {agents}"),
-        ("Debt Contact",       fin_i.get("debt_contact")),
-    ]):
-        r = _kv(ws1, r, k, v, alt=bool(i % 2))
-    r = _sp(ws1, r)
-
-    # ── B. Unit Mix ───────────────────────────────────────────────────────────
-    r = _sec(ws1, r, "B.  UNIT MIX")
-    if umix:
-        r = _thdr(ws1, r, ["Unit Type","Plan","Units","Mix %","SF / Unit",
-                            "In-Place Rent","In-Place PSF","Mkt Rent","Mkt PSF","Target Rent","Upside / Unit"])
-        ra = ["left","left","center","center","right","right","right","right","right","right","right"]
-        for i, u in enumerate(umix):
-            r = _drow(ws1, r, [
-                _v(u.get("type","—")), u.get("plan") or "—", _v(u.get("count"),"n"),
-                _pct(u.get("pct")), _v(u.get("sf"),"n"),
-                _v(u.get("market_rent"),"$"), _psf(u.get('market_psf')),
-                _v(u.get("eff_rent"),"$"), _psf(u.get('eff_psf')),
-                _v(u.get("target_rent"),"$"), _v(u.get("upside"),"$"),
-            ], alt=bool(i % 2), als=ra)
-    else:
-        r = _kv(ws1, r, "Note", "No unit mix data found.")
-    r = _sp(ws1, r)
-
-    # ── C. Operating Statement ────────────────────────────────────────────────
-    periods   = fin.get("periods") or []
-    inc_lines = fin.get("income_lines") or []
-    exp_lines = fin.get("expense_lines") or []
-
-    if periods and (inc_lines or exp_lines):
-        p_all = periods[:7]  # support up to 7 columns (e.g. F-3/Current/2ndGen + Year2-5)
-        r = _sec(ws1, r, f"C.  OPERATING STATEMENT  ({'  ·  '.join(p_all)})")
-        r = _thdr(ws1, r, ["Line Item"] + p_all + ["Underwriting Notes"])
-        f6 = ["left"] + ["right"] * len(p_all) + ["left"]
-
-        def _fin_row(item):
-            vals = item.get("values") or {}
-            return [item.get("item", "—")] + [
-                _v(vals.get(p), "$") if vals.get(p) is not None else "—" for p in p_all
-            ] + [item.get("note") or ""]
-
-        # Track which total rows were already rendered inline to avoid duplicates
-        rendered_totals = set()
-
-        r = _shdr(ws1, r, "INCOME")
-        for i, item in enumerate(inc_lines):
-            name = (item.get("item") or "").lower()
-            if item.get("is_total"):
-                rendered_totals.add(name)
-                # "NOI before reserves" rows render as subtotal (light blue), not amber NOI
-                if "before reserve" in name or "pre reserve" in name:
-                    r = _subtrow(ws1, r, _fin_row(item))
-                else:
-                    r = _noirow(ws1, r, _fin_row(item))
-            elif item.get("is_subtotal"):
-                r = _subtrow(ws1, r, _fin_row(item))
-            else:
-                r = _drow(ws1, r, _fin_row(item), alt=bool(i % 2), als=f6)
-
-        r = _shdr(ws1, r, "EXPENSES")
-        for i, item in enumerate(exp_lines):
-            name = (item.get("item") or "").lower()
-            if item.get("is_total"):
-                rendered_totals.add(name)
-                # "Total expenses pre reserve" / "NOI before reserves" → subtotal
-                if "before reserve" in name or "pre reserve" in name:
-                    r = _subtrow(ws1, r, _fin_row(item))
-                else:
-                    r = _totrow(ws1, r, _fin_row(item))
-            elif item.get("is_subtotal"):
-                r = _subtrow(ws1, r, _fin_row(item))
-            else:
-                r = _drow(ws1, r, _fin_row(item), alt=bool(i % 2), als=f6)
-
-        # NOI — only render from fin.noi dict if not already rendered inline
-        noi_d = fin.get("noi") or {}
-        noi_already = any("net operating income" in t for t in rendered_totals)
-        if not noi_already and any(_is_num(noi_d.get(p)) for p in p_all):
-            r = _noirow(ws1, r, ["NET OPERATING INCOME"] + [
-                _v(noi_d.get(p), "$") if _is_num(noi_d.get(p)) else "—" for p in p_all
-            ] + [""])
-
-        # Capital reserves — only if numeric
-        capex_d = fin.get("capex") or {}
-        if any(_is_num(capex_d.get(p)) for p in p_all):
-            r = _drow(ws1, r, ["  Capital Reserves"] + [
-                _v(capex_d.get(p), "$") if _is_num(capex_d.get(p)) else "—" for p in p_all
-            ] + [""], als=f6)
-
-        # CFFO — only render if numeric values exist (guards against Mosby's "N/A" string)
-        cffo_d = fin.get("cffo") or {}
-        if any(_is_num(cffo_d.get(p)) for p in p_all):
-            r = _noirow(ws1, r, ["CASH FLOW FROM OPERATIONS"] + [
-                _v(cffo_d.get(p), "$") if _is_num(cffo_d.get(p)) else "—" for p in p_all
-            ] + [""])
-    else:
-        r = _sec(ws1, r, "C.  OPERATING STATEMENT")
-        r = _kv(ws1, r, "Note", "No financial data found in OM.")
-    r = _sp(ws1, r)
-
-    # ── D. Value-Add ──────────────────────────────────────────────────────────
-    r = _sec(ws1, r, "D.  PROPOSED VALUE-ADD BY FLOOR PLAN")
-    plans = va.get("by_floor_plan") or []
-    if plans:
-        r = _thdr(ws1, r, ["Unit Type","Units","SF","In-Place Rent","In-Place PSF",
-                            "Rehab Cost / Unit","Premium / Unit","Post-Rehab Rent","Post-Rehab PSF"])
-        ra2 = ["left","center","right","right","right","right","right","right","right"]
-        for i, p in enumerate(plans):
-            r = _drow(ws1, r, [
-                p.get("type","—"), _v(p.get("units"),"n"), _v(p.get("sf"),"n"),
-                _v(p.get("inplace_rent"),"$"), _psf(p.get('inplace_psf')),
-                _v(p.get("rehab_cost"),"$"), _v(p.get("premium"),"$"),
-                _v(p.get("post_rehab_rent"),"$"), _psf(p.get('post_rehab_psf')),
-            ], alt=bool(i % 2), als=ra2)
-
-    # renovation tiers
-    tiers = inv.get("renovation_tiers") or []
-    if tiers:
-        r = _sp(ws1, r)
-        r = _shdr(ws1, r, "Renovation Tiers")
-        r = _thdr(ws1, r, ["Tier","Units","Appliances","Cabinets","Countertops","Flooring","Premium"])
-        for i, t in enumerate(tiers):
-            r = _drow(ws1, r, [
-                t.get("name","—"), _v(t.get("units"),"n"),
-                t.get("appliances") or "—", t.get("cabinets") or "—",
-                t.get("countertops") or "—", t.get("flooring") or "—",
-                _v(t.get("premium"),"$") if t.get("premium") else "—",
-            ], alt=bool(i % 2))
-
-    # light upgrade items
-    light = inv.get("light_upgrade_items") or va.get("light_upgrade_items") or []
-    if light:
-        r = _sp(ws1, r)
-        r = _shdr(ws1, r, "Interior Upgrade Scope")
-        for i, item in enumerate(light):
-            bg = C_ALT if bool(i % 2) else C_WHITE
-            _fr(ws1, r, 14, bg)
-            _sc(ws1, r, 1, f"{i+1}.  {item}", bg=bg, fg=C_BODY, size=9)
-            ws1.row_dimensions[r].height = 15; r += 1
-
-    r = _sp(ws1, r)
-    r = _shdr(ws1, r, "CapEx & ROI Summary")
-    for i, (k, v) in enumerate([
-        ("Total Renovation Cost",       _v(va.get("total_cost"), "$")),
-        ("Cost Per Unit (all-in)",      _v(va.get("cost_per_unit"), "$")),
-        ("Exterior / Additional CapEx", _v(va.get("exterior_capex"), "$")),
-        ("Monthly Rent Premium",        _v(va.get("monthly_premium"), "$")),
-        ("Annual Rent Premium",         _v(va.get("annual_premium"), "$")),
-        ("Return on Investment",        f"{va.get('roi_pct') or 'N/A'}%"),
-        ("Value-Add Scope",             va.get("scope")),
-    ]):
-        r = _kv(ws1, r, k, v, alt=bool(i % 2))
-
-    # ── Revenue Upside Levers ─────────────────────────────────────────────────
-    levers = d.get("value_add_levers") or []
-    if levers:
-        r = _sp(ws1, r)
-        r = _shdr(ws1, r, "Revenue Upside Levers")
-        r = _thdr(ws1, r, ["Value-Add Lever", "Units", "Mo. Premium / Unit", "Annual Upside", "Notes"])
-        total_auto = 0
-        for i, lv in enumerate(levers):
-            is_total = "TOTAL" in (lv.get("lever") or "").upper()
-            ann = lv.get("annual_upside")
-            try:
-                if not is_total:
-                    total_auto += float(ann or 0)
-            except Exception:
-                pass
-            row_data = [
-                lv.get("lever") or "—",
-                _v(lv.get("units"), "n") if not is_total else "",
-                _v(lv.get("monthly_premium"), "$") if not is_total else "",
-                _v(ann, "$"),
-                lv.get("notes") or "",
-            ]
-            if is_total:
-                r = _noirow(ws1, r, row_data)
-            else:
-                r = _drow(ws1, r, row_data, alt=bool(i % 2),
-                          als=["left", "center", "right", "right", "left"])
-        if levers and "TOTAL" not in (levers[-1].get("lever") or "").upper() and total_auto > 0:
-            r = _noirow(ws1, r, ["TOTAL ANNUAL REVENUE UPSIDE", "", "", _v(total_auto, "$"), ""])
-
-    r = _sp(ws1, r)
-
-    # ── E. Financing ──────────────────────────────────────────────────────────
-    r = _sec(ws1, r, "E.  FINANCING & DEBT TERMS")
-    r = _shdr(ws1, r, "Offering & Contact")
-    for i, (k, v) in enumerate([
-        ("Offering Type", fin_i.get("offering_type")),
-        ("Debt Contact",  fin_i.get("debt_contact")),
-        ("Notes",         fin_i.get("notes")),
-    ]):
-        r = _kv(ws1, r, k, v, alt=bool(i % 2))
-
-    nf  = fin_i.get("new_financing") or {}
-    asd = fin_i.get("assumable_debt") or {}
-
-    r = _shdr(ws1, r, "New Financing")
-    r = _thdr(ws1, r, ["Loan Type","Lender","Loan Amount","LTV","Interest Rate",
-                        "Rate Type","Loan Term","Amortization","Interest-Only","DSCR","Recourse","Notes"])
-    if any(nf.get(k) for k in ["loan_type","lender","loan_to_value","interest_rate"]):
-        r = _drow(ws1, r, [
-            nf.get("loan_type") or "—", nf.get("lender") or "—",
-            _v(nf.get("loan_amount"), "$"), f"{nf.get('loan_to_value') or 'N/A'}%",
-            f"{nf.get('interest_rate') or 'N/A'}%", nf.get("rate_type") or "—",
-            nf.get("loan_term_years") or "—", nf.get("amortization_years") or "—",
-            nf.get("interest_only_period") or "—", nf.get("dscr") or "—",
-            nf.get("recourse") or "—", nf.get("notes") or "—",
-        ], als=["left","left","right","right","right","center","center","center","center","center","center","left"])
-    else:
-        _fr(ws1, r, 14, C_ALT)
-        offering = (fin_i.get("offering_type") or "").lower()
-        if "all cash" in offering:
-            msg = "All Cash offering — no financing available. Buyer must close without debt."
-        else:
-            msg = "No new financing terms provided in OM. Contact debt broker for quote."
-        _sc(ws1, r, 1, msg, bg=C_ALT, fg=C_BODY, size=9, italic=True)
-        ws1.row_dimensions[r].height = 15; r += 1
-
-    r = _shdr(ws1, r, "Assumable Debt")
-    r = _thdr(ws1, r, ["Loan Type","Lender","Loan Amount","LTV","Interest Rate","Rate Type",
-                        "Loan Term","Amortization","Interest-Only","Origination","Maturity","Monthly Pmt","Annual DS","DSCR","Recourse"])
-    if any(asd.get(k) for k in ["loan_type","lender","loan_to_value","interest_rate"]):
-        r = _drow(ws1, r, [
-            asd.get("loan_type") or "—", asd.get("lender") or "—",
-            _v(asd.get("loan_amount"), "$"), _pct(asd.get("loan_to_value")),
-            _pct(asd.get("interest_rate")), asd.get("rate_type") or "—",
-            asd.get("loan_term_years") or "—", asd.get("amortization_years") or "—",
-            asd.get("interest_only_period") or "—",
-            asd.get("origination_date") or "—", asd.get("maturity_date") or "—",
-            _v(asd.get("monthly_payment"), "$"), _v(asd.get("annual_debt_service"), "$"),
-            asd.get("dscr") or "—", asd.get("recourse") or "—",
-        ], als=["left","left","right","right","right","center","center","center","center","center","center","right","right","center","center"])
-    else:
-        _fr(ws1, r, 14, C_ALT)
-        offering = (fin_i.get("offering_type") or "").lower()
-        if "all cash" in offering:
-            msg = "All Cash offering — no assumable debt. No existing financing on the property."
-        else:
-            msg = "None — property offered free and clear. No existing assumable debt."
-        _sc(ws1, r, 1, msg, bg=C_ALT, fg=C_BODY, size=9, italic=True)
-        ws1.row_dimensions[r].height = 15; r += 1
-    r = _sp(ws1, r)
-
-    # ── F. Underwriting Flags ─────────────────────────────────────────────────
-    r = _sec(ws1, r, "F.  UNDERWRITING FLAGS")
-    flag_bg = {"Warning": C_WARN, "Opportunity": C_GREEN_L, "Info": C_BLUE_L, "Verify": C_PURPLE_L}
-    if flags:
-        r = _thdr(ws1, r, ["Category", "Flag Title", "Detail"])
-        for f in flags:
-            cat = f.get("category", "Info")
-            bg  = flag_bg.get(cat, C_WHITE)
-            _sc(ws1, r, 1, cat, bold=True, bg=bg, size=9, fg=C_LABEL)
-            _sc(ws1, r, 2, f.get("title", ""), bold=True, bg=bg, size=9, fg=C_LABEL)
-            _sc(ws1, r, 3, f.get("detail", ""), bg=bg, size=9, fg=C_BODY, wrap=True)
-            for col in range(4, 15):
-                ws1.cell(row=r, column=col).fill = PatternFill("solid", fgColor=bg)
-            ws1.row_dimensions[r].height = 28; r += 1
-    else:
-        r = _kv(ws1, r, "Note", "No flags generated.")
-    r = _sp(ws1, r)
-
-    # ── G. Tax ────────────────────────────────────────────────────────────────
-    r = _sec(ws1, r, "G.  PROPERTY TAX & TAX ABATEMENT")
-    r = _shdr(ws1, r, "Property Tax Detail")
-    for i, (k, v) in enumerate([
-        ("Parcel ID",             tax.get("parcel_id")),
-        ("Assessed Market Value", _v(tax.get("assessed_value"), "$")),
-        ("Millage — City",        tax.get("millage_city")),
-        ("Millage — County",      tax.get("millage_county")),
-        ("Total Millage Rate",    tax.get("millage_total")),
-        ("Ad Valorem Tax",        _v(tax.get("tax_base"), "$")),
-        ("Solid Waste / Fees",    _v(tax.get("solid_waste_fee"), "$")),
-        ("Total Annual Tax Bill", _v(tax.get("total_tax"), "$")),
-    ]):
-        r = _kv(ws1, r, k, v, alt=bool(i % 2))
-    r = _shdr(ws1, r, "Tax Abatement Program")
-    for i, (k, v) in enumerate([
-        ("Program",               tax.get("abatement_program")),
-        ("Abatement %",           f"{tax.get('abatement_pct') or 'N/A'}%"),
-        ("Commitment Term",       tax.get("abatement_term_note")),
-        ("AMI Requirement",       f"{tax.get('ami_pct') or 'N/A'}% of Area Median Income"),
-        ("Annual Tax Savings",    _v(tax.get("abatement_annual_savings"), "$")),
-        ("Max Allowable Rent",    _v(tax.get("max_allowable_rent"), "$")),
-        ("Avg In-Place Rent",     _v(tax.get("avg_inplace_rent"), "$")),
-        ("Headroom / Unit",       _v(tax.get("rent_headroom"), "$")),
-    ]):
-        r = _kv(ws1, r, k, v, alt=bool(i % 2))
-    r = _sp(ws1, r)
-
-    # ── H. Replacement Cost / Insurance / Management ──────────────────────────
-    r = _sec(ws1, r, "H.  REPLACEMENT COST  ·  INSURANCE  ·  MANAGEMENT")
-    r = _shdr(ws1, r, "Replacement Cost")
-    # If detailed breakdown exists (Grand Preserve style), render full table
-    has_detail = any(repl.get(k) for k in ["hard_cost_per_sf","land_per_unit","gross_replacement_per_unit"])
-    if has_detail:
-        repl_rows = [
-            ("Component",                "Per Unit",                                           "Per SF",                                               "Total"),
-            ("Land",                     _v(repl.get("land_per_unit"),"$"),                   "—",                                                    _v(repl.get("land_total"),"$")),
-            ("Hard Costs",               _v(repl.get("hard_cost_per_unit"),"$"),              _v(repl.get("hard_cost_per_sf"),"$"),                   _v(repl.get("hard_cost_total"),"$")),
-            ("Soft Costs",               _v(repl.get("soft_cost_per_unit"),"$"),              f"{repl.get('soft_cost_pct') or '—'}% of hard",         _v(repl.get("soft_cost_total"),"$")),
-        ]
-        r = _thdr(ws1, r, ["Component","Per Unit","Per SF","Total Cost"])
-        for i, row in enumerate(repl_rows[1:]):
-            r = _drow(ws1, r, list(row), alt=bool(i%2), als=["left","right","right","right"])
-        if repl.get("direct_replacement_per_unit"):
-            r = _subtrow(ws1, r, ["Direct Replacement Cost", _v(repl.get("direct_replacement_per_unit"),"$"), _v(repl.get("direct_replacement_per_sf"),"$"), _v(repl.get("direct_replacement_total"),"$")])
-        dev_rows = []
-        if repl.get("developer_fee_per_unit"):
-            dev_rows.append(("Developer Fee", _v(repl.get("developer_fee_per_unit"),"$"), f"{repl.get('developer_fee_pct') or '—'}% of project", _v(repl.get("developer_fee_total"),"$")))
-        if repl.get("gc_fee_per_unit"):
-            dev_rows.append(("GC Fee",        _v(repl.get("gc_fee_per_unit"),"$"), f"{repl.get('gc_fee_pct') or '—'}% of hard costs", _v(repl.get("gc_fee_total"),"$")))
-        for i, row in enumerate(dev_rows):
-            r = _drow(ws1, r, list(row), alt=bool(i%2), als=["left","right","right","right"])
-        if repl.get("gross_replacement_per_unit"):
-            r = _noirow(ws1, r, ["Gross Replacement Cost", _v(repl.get("gross_replacement_per_unit"),"$"), _v(repl.get("gross_replacement_per_sf"),"$"), _v(repl.get("gross_replacement_total"),"$")])
-        if repl.get("notes"):
-            r = _kv(ws1, r, "Notes", repl.get("notes"))
-    else:
+    if _on('deal'):
+        # ── A. Deal Summary ───────────────────────────────────────────────────────
+        r = _sec(ws1, r, "A.  DEAL SUMMARY & PROPERTY DETAILS")
+        agents = ", ".join(
+            a.get("name", str(a)) if isinstance(a, dict) else str(a)
+            for a in ((d.get("broker") or {}).get("agents") or [])
+        ) or "N/A"
         for i, (k, v) in enumerate([
-            ("Cost Per Unit",     _v(repl.get("per_unit") or repl.get("gross_replacement_per_unit"), "$")),
-            ("Cost Per SF",       _v(repl.get("per_sf") or repl.get("gross_replacement_per_sf"), "$")),
-            ("Total Replacement", _v(repl.get("total") or repl.get("gross_replacement_total"), "$")),
-            ("Land Per Unit",     _v(repl.get("land_per_unit"), "$")),
-            ("Hard Cost Per SF",  _v(repl.get("hard_cost_per_sf"), "$")),
-            ("Soft Cost %",       f"{repl.get('soft_cost_pct') or 'N/A'}%"),
-            ("Source",            repl.get("source")),
-            ("Notes",             repl.get("notes")),
+            ("Property Name",      prop),
+            ("Address",            addr),
+            ("County / MSA",       f"{pd_.get('county') or 'N/A'}  ·  {pd_.get('msa') or 'N/A'}"),
+            ("Total Units",        _v(pd_.get("units"), "n")),
+            ("Year Built",         _v(pd_.get("year_built"))),
+            ("Net Rentable SF",    f"{_v(pd_.get('rentable_sf'), 'n')} SF  (Avg {_v(pd_.get('avg_unit_sf'), 'n')} SF/unit)"),
+            ("Buildings / Stories",f"{_v(pd_.get('buildings'), 'n')} buildings  ·  {_v(pd_.get('floors'))} stories"),
+            ("Land Area",          f"{_v(pd_.get('acres'))} acres  ({_v(pd_.get('density'))} units/acre)"),
+            ("Asset Class",        pd_.get("asset_class")),
+            ("Occupancy",          f"{_v(pd_.get('occupancy_pct'), '%')}  as of {pd_.get('occupancy_date') or 'N/A'}"),
+            ("Offering Type",      fin_i.get("offering_type")),
+            ("Broker / Agents",    f"{broker}  ·  {agents}"),
+            ("Debt Contact",       fin_i.get("debt_contact")),
         ]):
             r = _kv(ws1, r, k, v, alt=bool(i % 2))
-    r = _shdr(ws1, r, "Insurance")
-    for i, (k, v) in enumerate([
-        ("Carrier / Provider", insur.get("carrier")),
-        ("Annual Premium",     _v(insur.get("annual_premium"), "$")),
-        ("Per Unit / Year",    _v(insur.get("per_unit"), "$")),
-        ("Quote Source",       insur.get("quote_source")),
-        ("Notes",              insur.get("notes")),
-    ]):
-        r = _kv(ws1, r, k, v, alt=bool(i % 2))
-    r = _shdr(ws1, r, "Property Management")
-    for i, (k, v) in enumerate([
-        ("Management Fee %",   f"{mgmt.get('fee_pct') or 'N/A'}% of EGI"),
-        ("Annual Fee",         _v(mgmt.get("fee_annual"), "$")),
-        ("Per Unit / Year",    _v(mgmt.get("fee_per_unit"), "$")),
-        ("Current Manager",    mgmt.get("current_manager")),
-        ("Proposed Manager",   mgmt.get("proposed_manager")),
-        ("Notes",              mgmt.get("notes")),
-    ]):
-        r = _kv(ws1, r, k, v, alt=bool(i % 2))
-    r = _sp(ws1, r)
+        r = _sp(ws1, r)
 
-    # Disclaimer
-    _fr(ws1, r, 14, C_ALT)
-    _sc(ws1, r, 1, "AI-generated from broker OM. Internal use only. Verify all figures independently. Powered by Anthropic Claude.",
-        bg=C_ALT, fg="FF888880", size=8, italic=True)
-    ws1.row_dimensions[r].height = 13
+    if _on('unitmix'):
+        # ── B. Unit Mix ───────────────────────────────────────────────────────────
+        r = _sec(ws1, r, "B.  UNIT MIX")
+        if umix:
+            r = _thdr(ws1, r, ["Unit Type","Plan","Units","Mix %","SF / Unit",
+                                "In-Place Rent","In-Place PSF","Mkt Rent","Mkt PSF","Target Rent","Upside / Unit"])
+            ra = ["left","left","center","center","right","right","right","right","right","right","right"]
+            for i, u in enumerate(umix):
+                r = _drow(ws1, r, [
+                    _v(u.get("type","—")), u.get("plan") or "—", _v(u.get("count"),"n"),
+                    _pct(u.get("pct")), _v(u.get("sf"),"n"),
+                    _v(u.get("market_rent"),"$"), _psf(u.get('market_psf')),
+                    _v(u.get("eff_rent"),"$"), _psf(u.get('eff_psf')),
+                    _v(u.get("target_rent"),"$"), _v(u.get("upside"),"$"),
+                ], alt=bool(i % 2), als=ra)
+        else:
+            r = _kv(ws1, r, "Note", "No unit mix data found.")
+        r = _sp(ws1, r)
 
-    # ══════════════════════════════════════════════════════════════════════════
+        # ── C. Operating Statement ────────────────────────────────────────────────
+        periods   = fin.get("periods") or []
+    if _on('opstat'):
+        inc_lines = fin.get("income_lines") or []
+        exp_lines = fin.get("expense_lines") or []
+
+        if periods and (inc_lines or exp_lines):
+            p_all = periods[:7]  # support up to 7 columns (e.g. F-3/Current/2ndGen + Year2-5)
+            r = _sec(ws1, r, f"C.  OPERATING STATEMENT  ({'  ·  '.join(p_all)})")
+            r = _thdr(ws1, r, ["Line Item"] + p_all + ["Underwriting Notes"])
+            f6 = ["left"] + ["right"] * len(p_all) + ["left"]
+
+            def _fin_row(item):
+                vals = item.get("values") or {}
+                return [item.get("item", "—")] + [
+                    _v(vals.get(p), "$") if vals.get(p) is not None else "—" for p in p_all
+                ] + [item.get("note") or ""]
+
+            # Track which total rows were already rendered inline to avoid duplicates
+            rendered_totals = set()
+
+            r = _shdr(ws1, r, "INCOME")
+            for i, item in enumerate(inc_lines):
+                name = (item.get("item") or "").lower()
+                if item.get("is_total"):
+                    rendered_totals.add(name)
+                    # "NOI before reserves" rows render as subtotal (light blue), not amber NOI
+                    if "before reserve" in name or "pre reserve" in name:
+                        r = _subtrow(ws1, r, _fin_row(item))
+                    else:
+                        r = _noirow(ws1, r, _fin_row(item))
+                elif item.get("is_subtotal"):
+                    r = _subtrow(ws1, r, _fin_row(item))
+                else:
+                    r = _drow(ws1, r, _fin_row(item), alt=bool(i % 2), als=f6)
+
+            r = _shdr(ws1, r, "EXPENSES")
+            for i, item in enumerate(exp_lines):
+                name = (item.get("item") or "").lower()
+                if item.get("is_total"):
+                    rendered_totals.add(name)
+                    # "Total expenses pre reserve" / "NOI before reserves" → subtotal
+                    if "before reserve" in name or "pre reserve" in name:
+                        r = _subtrow(ws1, r, _fin_row(item))
+                    else:
+                        r = _totrow(ws1, r, _fin_row(item))
+                elif item.get("is_subtotal"):
+                    r = _subtrow(ws1, r, _fin_row(item))
+                else:
+                    r = _drow(ws1, r, _fin_row(item), alt=bool(i % 2), als=f6)
+
+            # NOI — only render from fin.noi dict if not already rendered inline
+            noi_d = fin.get("noi") or {}
+            noi_already = any("net operating income" in t for t in rendered_totals)
+            if not noi_already and any(_is_num(noi_d.get(p)) for p in p_all):
+                r = _noirow(ws1, r, ["NET OPERATING INCOME"] + [
+                    _v(noi_d.get(p), "$") if _is_num(noi_d.get(p)) else "—" for p in p_all
+                ] + [""])
+
+            # Capital reserves — only if numeric
+            capex_d = fin.get("capex") or {}
+            if any(_is_num(capex_d.get(p)) for p in p_all):
+                r = _drow(ws1, r, ["  Capital Reserves"] + [
+                    _v(capex_d.get(p), "$") if _is_num(capex_d.get(p)) else "—" for p in p_all
+                ] + [""], als=f6)
+
+            # CFFO — only render if numeric values exist (guards against Mosby's "N/A" string)
+            cffo_d = fin.get("cffo") or {}
+            if any(_is_num(cffo_d.get(p)) for p in p_all):
+                r = _noirow(ws1, r, ["CASH FLOW FROM OPERATIONS"] + [
+                    _v(cffo_d.get(p), "$") if _is_num(cffo_d.get(p)) else "—" for p in p_all
+                ] + [""])
+        else:
+            r = _sec(ws1, r, "C.  OPERATING STATEMENT")
+            r = _kv(ws1, r, "Note", "No financial data found in OM.")
+        r = _sp(ws1, r)
+    if _on('valueadd'):
+
+        # ── D. Value-Add ──────────────────────────────────────────────────────────
+        r = _sec(ws1, r, "D.  PROPOSED VALUE-ADD BY FLOOR PLAN")
+        plans = va.get("by_floor_plan") or []
+        if plans:
+            r = _thdr(ws1, r, ["Unit Type","Units","SF","In-Place Rent","In-Place PSF",
+                                "Rehab Cost / Unit","Premium / Unit","Post-Rehab Rent","Post-Rehab PSF"])
+            ra2 = ["left","center","right","right","right","right","right","right","right"]
+            for i, p in enumerate(plans):
+                r = _drow(ws1, r, [
+                    p.get("type","—"), _v(p.get("units"),"n"), _v(p.get("sf"),"n"),
+                    _v(p.get("inplace_rent"),"$"), _psf(p.get('inplace_psf')),
+                    _v(p.get("rehab_cost"),"$"), _v(p.get("premium"),"$"),
+                    _v(p.get("post_rehab_rent"),"$"), _psf(p.get('post_rehab_psf')),
+                ], alt=bool(i % 2), als=ra2)
+
+        # renovation tiers
+        tiers = inv.get("renovation_tiers") or []
+        if tiers:
+            r = _sp(ws1, r)
+            r = _shdr(ws1, r, "Renovation Tiers")
+            r = _thdr(ws1, r, ["Tier","Units","Appliances","Cabinets","Countertops","Flooring","Premium"])
+            for i, t in enumerate(tiers):
+                r = _drow(ws1, r, [
+                    t.get("name","—"), _v(t.get("units"),"n"),
+                    t.get("appliances") or "—", t.get("cabinets") or "—",
+                    t.get("countertops") or "—", t.get("flooring") or "—",
+                    _v(t.get("premium"),"$") if t.get("premium") else "—",
+                ], alt=bool(i % 2))
+
+        # light upgrade items
+        light = inv.get("light_upgrade_items") or va.get("light_upgrade_items") or []
+        if light:
+            r = _sp(ws1, r)
+            r = _shdr(ws1, r, "Interior Upgrade Scope")
+            for i, item in enumerate(light):
+                bg = C_ALT if bool(i % 2) else C_WHITE
+                _fr(ws1, r, 14, bg)
+                _sc(ws1, r, 1, f"{i+1}.  {item}", bg=bg, fg=C_BODY, size=9)
+                ws1.row_dimensions[r].height = 15; r += 1
+
+        r = _sp(ws1, r)
+        r = _shdr(ws1, r, "CapEx & ROI Summary")
+        for i, (k, v) in enumerate([
+            ("Total Renovation Cost",       _v(va.get("total_cost"), "$")),
+            ("Cost Per Unit (all-in)",      _v(va.get("cost_per_unit"), "$")),
+            ("Exterior / Additional CapEx", _v(va.get("exterior_capex"), "$")),
+            ("Monthly Rent Premium",        _v(va.get("monthly_premium"), "$")),
+            ("Annual Rent Premium",         _v(va.get("annual_premium"), "$")),
+            ("Return on Investment",        f"{va.get('roi_pct') or 'N/A'}%"),
+            ("Value-Add Scope",             va.get("scope")),
+        ]):
+            r = _kv(ws1, r, k, v, alt=bool(i % 2))
+
+        # ── Revenue Upside Levers ─────────────────────────────────────────────────
+        levers = d.get("value_add_levers") or []
+        if levers:
+            r = _sp(ws1, r)
+            r = _shdr(ws1, r, "Revenue Upside Levers")
+            r = _thdr(ws1, r, ["Value-Add Lever", "Units", "Mo. Premium / Unit", "Annual Upside", "Notes"])
+            total_auto = 0
+            for i, lv in enumerate(levers):
+                is_total = "TOTAL" in (lv.get("lever") or "").upper()
+                ann = lv.get("annual_upside")
+                try:
+                    if not is_total:
+                        total_auto += float(ann or 0)
+                except Exception:
+                    pass
+                row_data = [
+                    lv.get("lever") or "—",
+                    _v(lv.get("units"), "n") if not is_total else "",
+                    _v(lv.get("monthly_premium"), "$") if not is_total else "",
+                    _v(ann, "$"),
+                    lv.get("notes") or "",
+                ]
+                if is_total:
+                    r = _noirow(ws1, r, row_data)
+                else:
+                    r = _drow(ws1, r, row_data, alt=bool(i % 2),
+                              als=["left", "center", "right", "right", "left"])
+            if levers and "TOTAL" not in (levers[-1].get("lever") or "").upper() and total_auto > 0:
+                r = _noirow(ws1, r, ["TOTAL ANNUAL REVENUE UPSIDE", "", "", _v(total_auto, "$"), ""])
+
+        r = _sp(ws1, r)
+    if _on('financing'):
+
+        # ── E. Financing ──────────────────────────────────────────────────────────
+        r = _sec(ws1, r, "E.  FINANCING & DEBT TERMS")
+        r = _shdr(ws1, r, "Offering & Contact")
+        for i, (k, v) in enumerate([
+            ("Offering Type", fin_i.get("offering_type")),
+            ("Debt Contact",  fin_i.get("debt_contact")),
+            ("Notes",         fin_i.get("notes")),
+        ]):
+            r = _kv(ws1, r, k, v, alt=bool(i % 2))
+
+        nf  = fin_i.get("new_financing") or {}
+        asd = fin_i.get("assumable_debt") or {}
+
+        r = _shdr(ws1, r, "New Financing")
+        r = _thdr(ws1, r, ["Loan Type","Lender","Loan Amount","LTV","Interest Rate",
+                            "Rate Type","Loan Term","Amortization","Interest-Only","DSCR","Recourse","Notes"])
+        if any(nf.get(k) for k in ["loan_type","lender","loan_to_value","interest_rate"]):
+            r = _drow(ws1, r, [
+                nf.get("loan_type") or "—", nf.get("lender") or "—",
+                _v(nf.get("loan_amount"), "$"), f"{nf.get('loan_to_value') or 'N/A'}%",
+                f"{nf.get('interest_rate') or 'N/A'}%", nf.get("rate_type") or "—",
+                nf.get("loan_term_years") or "—", nf.get("amortization_years") or "—",
+                nf.get("interest_only_period") or "—", nf.get("dscr") or "—",
+                nf.get("recourse") or "—", nf.get("notes") or "—",
+            ], als=["left","left","right","right","right","center","center","center","center","center","center","left"])
+        else:
+            _fr(ws1, r, 14, C_ALT)
+            offering = (fin_i.get("offering_type") or "").lower()
+            if "all cash" in offering:
+                msg = "All Cash offering — no financing available. Buyer must close without debt."
+            else:
+                msg = "No new financing terms provided in OM. Contact debt broker for quote."
+            _sc(ws1, r, 1, msg, bg=C_ALT, fg=C_BODY, size=9, italic=True)
+            ws1.row_dimensions[r].height = 15; r += 1
+
+        r = _shdr(ws1, r, "Assumable Debt")
+        r = _thdr(ws1, r, ["Loan Type","Lender","Loan Amount","LTV","Interest Rate","Rate Type",
+                            "Loan Term","Amortization","Interest-Only","Origination","Maturity","Monthly Pmt","Annual DS","DSCR","Recourse"])
+        if any(asd.get(k) for k in ["loan_type","lender","loan_to_value","interest_rate"]):
+            r = _drow(ws1, r, [
+                asd.get("loan_type") or "—", asd.get("lender") or "—",
+                _v(asd.get("loan_amount"), "$"), _pct(asd.get("loan_to_value")),
+                _pct(asd.get("interest_rate")), asd.get("rate_type") or "—",
+                asd.get("loan_term_years") or "—", asd.get("amortization_years") or "—",
+                asd.get("interest_only_period") or "—",
+                asd.get("origination_date") or "—", asd.get("maturity_date") or "—",
+                _v(asd.get("monthly_payment"), "$"), _v(asd.get("annual_debt_service"), "$"),
+                asd.get("dscr") or "—", asd.get("recourse") or "—",
+            ], als=["left","left","right","right","right","center","center","center","center","center","center","right","right","center","center"])
+        else:
+            _fr(ws1, r, 14, C_ALT)
+            offering = (fin_i.get("offering_type") or "").lower()
+            if "all cash" in offering:
+                msg = "All Cash offering — no assumable debt. No existing financing on the property."
+            else:
+                msg = "None — property offered free and clear. No existing assumable debt."
+            _sc(ws1, r, 1, msg, bg=C_ALT, fg=C_BODY, size=9, italic=True)
+            ws1.row_dimensions[r].height = 15; r += 1
+        r = _sp(ws1, r)
+    if _on('flags'):
+
+        # ── F. Underwriting Flags ─────────────────────────────────────────────────
+        r = _sec(ws1, r, "F.  UNDERWRITING FLAGS")
+        flag_bg = {"Warning": C_WARN, "Opportunity": C_GREEN_L, "Info": C_BLUE_L, "Verify": C_PURPLE_L}
+        if flags:
+            r = _thdr(ws1, r, ["Category", "Flag Title", "Detail"])
+            for f in flags:
+                cat = f.get("category", "Info")
+                bg  = flag_bg.get(cat, C_WHITE)
+                _sc(ws1, r, 1, cat, bold=True, bg=bg, size=9, fg=C_LABEL)
+                _sc(ws1, r, 2, f.get("title", ""), bold=True, bg=bg, size=9, fg=C_LABEL)
+                _sc(ws1, r, 3, f.get("detail", ""), bg=bg, size=9, fg=C_BODY, wrap=True)
+                for col in range(4, 15):
+                    ws1.cell(row=r, column=col).fill = PatternFill("solid", fgColor=bg)
+                ws1.row_dimensions[r].height = 28; r += 1
+        else:
+            r = _kv(ws1, r, "Note", "No flags generated.")
+        r = _sp(ws1, r)
+    if _on('tax'):
+
+        # ── G. Tax ────────────────────────────────────────────────────────────────
+        r = _sec(ws1, r, "G.  PROPERTY TAX & TAX ABATEMENT")
+        r = _shdr(ws1, r, "Property Tax Detail")
+        for i, (k, v) in enumerate([
+            ("Parcel ID",             tax.get("parcel_id")),
+            ("Assessed Market Value", _v(tax.get("assessed_value"), "$")),
+            ("Millage — City",        tax.get("millage_city")),
+            ("Millage — County",      tax.get("millage_county")),
+            ("Total Millage Rate",    tax.get("millage_total")),
+            ("Ad Valorem Tax",        _v(tax.get("tax_base"), "$")),
+            ("Solid Waste / Fees",    _v(tax.get("solid_waste_fee"), "$")),
+            ("Total Annual Tax Bill", _v(tax.get("total_tax"), "$")),
+        ]):
+            r = _kv(ws1, r, k, v, alt=bool(i % 2))
+        r = _shdr(ws1, r, "Tax Abatement Program")
+        for i, (k, v) in enumerate([
+            ("Program",               tax.get("abatement_program")),
+            ("Abatement %",           f"{tax.get('abatement_pct') or 'N/A'}%"),
+            ("Commitment Term",       tax.get("abatement_term_note")),
+            ("AMI Requirement",       f"{tax.get('ami_pct') or 'N/A'}% of Area Median Income"),
+            ("Annual Tax Savings",    _v(tax.get("abatement_annual_savings"), "$")),
+            ("Max Allowable Rent",    _v(tax.get("max_allowable_rent"), "$")),
+            ("Avg In-Place Rent",     _v(tax.get("avg_inplace_rent"), "$")),
+            ("Headroom / Unit",       _v(tax.get("rent_headroom"), "$")),
+        ]):
+            r = _kv(ws1, r, k, v, alt=bool(i % 2))
+        r = _sp(ws1, r)
+    if _on('repl'):
+
+        # ── H. Replacement Cost / Insurance / Management ──────────────────────────
+        r = _sec(ws1, r, "H.  REPLACEMENT COST  ·  INSURANCE  ·  MANAGEMENT")
+        r = _shdr(ws1, r, "Replacement Cost")
+        # If detailed breakdown exists (Grand Preserve style), render full table
+        has_detail = any(repl.get(k) for k in ["hard_cost_per_sf","land_per_unit","gross_replacement_per_unit"])
+        if has_detail:
+            repl_rows = [
+                ("Component",                "Per Unit",                                           "Per SF",                                               "Total"),
+                ("Land",                     _v(repl.get("land_per_unit"),"$"),                   "—",                                                    _v(repl.get("land_total"),"$")),
+                ("Hard Costs",               _v(repl.get("hard_cost_per_unit"),"$"),              _v(repl.get("hard_cost_per_sf"),"$"),                   _v(repl.get("hard_cost_total"),"$")),
+                ("Soft Costs",               _v(repl.get("soft_cost_per_unit"),"$"),              f"{repl.get('soft_cost_pct') or '—'}% of hard",         _v(repl.get("soft_cost_total"),"$")),
+            ]
+            r = _thdr(ws1, r, ["Component","Per Unit","Per SF","Total Cost"])
+            for i, row in enumerate(repl_rows[1:]):
+                r = _drow(ws1, r, list(row), alt=bool(i%2), als=["left","right","right","right"])
+            if repl.get("direct_replacement_per_unit"):
+                r = _subtrow(ws1, r, ["Direct Replacement Cost", _v(repl.get("direct_replacement_per_unit"),"$"), _v(repl.get("direct_replacement_per_sf"),"$"), _v(repl.get("direct_replacement_total"),"$")])
+            dev_rows = []
+            if repl.get("developer_fee_per_unit"):
+                dev_rows.append(("Developer Fee", _v(repl.get("developer_fee_per_unit"),"$"), f"{repl.get('developer_fee_pct') or '—'}% of project", _v(repl.get("developer_fee_total"),"$")))
+            if repl.get("gc_fee_per_unit"):
+                dev_rows.append(("GC Fee",        _v(repl.get("gc_fee_per_unit"),"$"), f"{repl.get('gc_fee_pct') or '—'}% of hard costs", _v(repl.get("gc_fee_total"),"$")))
+            for i, row in enumerate(dev_rows):
+                r = _drow(ws1, r, list(row), alt=bool(i%2), als=["left","right","right","right"])
+            if repl.get("gross_replacement_per_unit"):
+                r = _noirow(ws1, r, ["Gross Replacement Cost", _v(repl.get("gross_replacement_per_unit"),"$"), _v(repl.get("gross_replacement_per_sf"),"$"), _v(repl.get("gross_replacement_total"),"$")])
+            if repl.get("notes"):
+                r = _kv(ws1, r, "Notes", repl.get("notes"))
+        else:
+            for i, (k, v) in enumerate([
+                ("Cost Per Unit",     _v(repl.get("per_unit") or repl.get("gross_replacement_per_unit"), "$")),
+                ("Cost Per SF",       _v(repl.get("per_sf") or repl.get("gross_replacement_per_sf"), "$")),
+                ("Total Replacement", _v(repl.get("total") or repl.get("gross_replacement_total"), "$")),
+                ("Land Per Unit",     _v(repl.get("land_per_unit"), "$")),
+                ("Hard Cost Per SF",  _v(repl.get("hard_cost_per_sf"), "$")),
+                ("Soft Cost %",       f"{repl.get('soft_cost_pct') or 'N/A'}%"),
+                ("Source",            repl.get("source")),
+                ("Notes",             repl.get("notes")),
+            ]):
+                r = _kv(ws1, r, k, v, alt=bool(i % 2))
+        r = _shdr(ws1, r, "Insurance")
+        for i, (k, v) in enumerate([
+            ("Carrier / Provider", insur.get("carrier")),
+            ("Annual Premium",     _v(insur.get("annual_premium"), "$")),
+            ("Per Unit / Year",    _v(insur.get("per_unit"), "$")),
+            ("Quote Source",       insur.get("quote_source")),
+            ("Notes",              insur.get("notes")),
+        ]):
+            r = _kv(ws1, r, k, v, alt=bool(i % 2))
+        r = _shdr(ws1, r, "Property Management")
+        for i, (k, v) in enumerate([
+            ("Management Fee %",   f"{mgmt.get('fee_pct') or 'N/A'}% of EGI"),
+            ("Annual Fee",         _v(mgmt.get("fee_annual"), "$")),
+            ("Per Unit / Year",    _v(mgmt.get("fee_per_unit"), "$")),
+            ("Current Manager",    mgmt.get("current_manager")),
+            ("Proposed Manager",   mgmt.get("proposed_manager")),
+            ("Notes",              mgmt.get("notes")),
+        ]):
+            r = _kv(ws1, r, k, v, alt=bool(i % 2))
+        r = _sp(ws1, r)
+
+        # Disclaimer
+        _fr(ws1, r, 14, C_ALT)
+        _sc(ws1, r, 1, "AI-generated from broker OM. Internal use only. Verify all figures independently. Powered by Anthropic Claude.",
+            bg=C_ALT, fg="FF888880", size=8, italic=True)
+        ws1.row_dimensions[r].height = 13
+
+        # ══════════════════════════════════════════════════════════════════════════
     # TAB 2 — COMPARABLES
     # ══════════════════════════════════════════════════════════════════════════
     ws2 = wb.create_sheet("Comparables")
@@ -1225,57 +1281,61 @@ def build_excel(d: dict, filename: str) -> bytes:
         r = _sp(ws, r)
         return r
 
-    # ── A. Garden Rent Comps ──────────────────────────────────────────────────
-    if rg:
-        r = _render_comp_group(ws2, r, rg, "A.  GARDEN RENT COMPARABLES", "Garden")
+    if _on('rentcomps'):
+        # ── A. Garden Rent Comps ──────────────────────────────────────────────────
+        if rg:
+            r = _render_comp_group(ws2, r, rg, "A.  GARDEN RENT COMPARABLES", "Garden")
 
-    # ── B. Townhouse Rent Comps ───────────────────────────────────────────────
-    if rth:
-        sec_letter = "B" if rg else "A"
-        r = _render_comp_group(ws2, r, rth, f"{sec_letter}.  TOWNHOUSE RENT COMPARABLES", "Townhouse")
+    if _on('rentcomps'):
+        # ── B. Townhouse Rent Comps ───────────────────────────────────────────────
+        if rth:
+            sec_letter = "B" if rg else "A"
+            r = _render_comp_group(ws2, r, rth, f"{sec_letter}.  TOWNHOUSE RENT COMPARABLES", "Townhouse")
 
-    # ── C. Full Comp Detail (covers Mosby-style OMs with only rcomps) ─────────
-    if rcomps:
-        sec_full = "A" if (not rg and not rth) else ("C" if (rg and rth) else "B")
-        r = _sec(ws2, r, f"{sec_full}.  FULL COMPARABLE DETAIL", n=11)
-        r = _thdr(ws2, r, ["#","Property","Type","Yr Built","Distance","Units",
-                            "Occ %","Mkt Rent","Eff Rent","Avg SF","Notes"], n=11)
-        for i, rc in enumerate(rcomps):
-            r = _drow(ws2, r, [
-                rc.get("id","—"), rc.get("name","—"), rc.get("comp_type") or "—",
-                _v(rc.get("year_built")), rc.get("distance") or "—",
-                _v(rc.get("units"),"n"), _pct(rc.get("occupancy")),
-                _v(rc.get("total_market"),"$"), _v(rc.get("total_eff"),"$"),
-                _v(rc.get("avg_sf"),"n"), "—",
-            ], alt=bool(i % 2), als=["center","left","center","center","center","center",
-                                      "center","right","right","right","left"], n=11)
+    if _on('rentcomps'):
+        # ── C. Full Comp Detail (covers Mosby-style OMs with only rcomps) ─────────
+        if rcomps:
+            sec_full = "A" if (not rg and not rth) else ("C" if (rg and rth) else "B")
+            r = _sec(ws2, r, f"{sec_full}.  FULL COMPARABLE DETAIL", n=11)
+            r = _thdr(ws2, r, ["#","Property","Type","Yr Built","Distance","Units",
+                                "Occ %","Mkt Rent","Eff Rent","Avg SF","Notes"], n=11)
+            for i, rc in enumerate(rcomps):
+                r = _drow(ws2, r, [
+                    rc.get("id","—"), rc.get("name","—"), rc.get("comp_type") or "—",
+                    _v(rc.get("year_built")), rc.get("distance") or "—",
+                    _v(rc.get("units"),"n"), _pct(rc.get("occupancy")),
+                    _v(rc.get("total_market"),"$"), _v(rc.get("total_eff"),"$"),
+                    _v(rc.get("avg_sf"),"n"), "—",
+                ], alt=bool(i % 2), als=["center","left","center","center","center","center",
+                                          "center","right","right","right","left"], n=11)
+            r = _sp(ws2, r)
+
+        if not rg and not rth and not rcomps:
+            r = _sec(ws2, r, "A.  RENT COMPARABLES", n=11)
+            r = _kv(ws2, r, "Note", "No rent comparable data found in OM. Source from listing broker or CoStar.", n=11)
+            r = _sp(ws2, r)
+
+    if _on('salecomps'):
+        # ── D. Sale Comps ─────────────────────────────────────────────────────────
+        r = _sec(ws2, r, "D.  SALE COMPARABLES", n=11)
+        if scomps:
+            r = _thdr(ws2, r, ["Property","Date","Yr Built","Units","Sale Price",
+                                "$/Unit","$/SF","Cap Rate","Occ","Buyer","Seller"], n=11)
+            for i, sc in enumerate(scomps):
+                r = _drow(ws2, r, [
+                    sc.get("name","—"), sc.get("date") or "—", _v(sc.get("year_built")),
+                    _v(sc.get("units"),"n"), _v(sc.get("price"),"$"),
+                    _v(sc.get("ppu"),"$"), _v(sc.get("ppsf"),"$"),
+                    sc.get("cap_rate") or "—", sc.get("occupancy") or "—",
+                    sc.get("buyer") or "—", sc.get("seller") or "—",
+                ], alt=bool(i % 2), n=11,
+                   als=["left","center","center","center","right","right","right","center","center","left","left"])
+        else:
+            _fr(ws2, r, 11, C_ALT)
+            _sc(ws2, r, 1, "Sale comps not provided in OM. Source from CoStar, RCA, or listing broker.",
+                bg=C_ALT, fg=C_BODY, size=9, italic=True, wrap=True)
+            ws2.row_dimensions[r].height = 20; r += 1
         r = _sp(ws2, r)
-
-    if not rg and not rth and not rcomps:
-        r = _sec(ws2, r, "A.  RENT COMPARABLES", n=11)
-        r = _kv(ws2, r, "Note", "No rent comparable data found in OM. Source from listing broker or CoStar.", n=11)
-        r = _sp(ws2, r)
-
-    # ── D. Sale Comps ─────────────────────────────────────────────────────────
-    r = _sec(ws2, r, "D.  SALE COMPARABLES", n=11)
-    if scomps:
-        r = _thdr(ws2, r, ["Property","Date","Yr Built","Units","Sale Price",
-                            "$/Unit","$/SF","Cap Rate","Occ","Buyer","Seller"], n=11)
-        for i, sc in enumerate(scomps):
-            r = _drow(ws2, r, [
-                sc.get("name","—"), sc.get("date") or "—", _v(sc.get("year_built")),
-                _v(sc.get("units"),"n"), _v(sc.get("price"),"$"),
-                _v(sc.get("ppu"),"$"), _v(sc.get("ppsf"),"$"),
-                sc.get("cap_rate") or "—", sc.get("occupancy") or "—",
-                sc.get("buyer") or "—", sc.get("seller") or "—",
-            ], alt=bool(i % 2), n=11,
-               als=["left","center","center","center","right","right","right","center","center","left","left"])
-    else:
-        _fr(ws2, r, 11, C_ALT)
-        _sc(ws2, r, 1, "Sale comps not provided in OM. Source from CoStar, RCA, or listing broker.",
-            bg=C_ALT, fg=C_BODY, size=9, italic=True, wrap=True)
-        ws2.row_dimensions[r].height = 20; r += 1
-    r = _sp(ws2, r)
 
     # Disclaimer
     _fr(ws2, r, 11, C_ALT)
@@ -1294,203 +1354,212 @@ def build_excel(d: dict, filename: str) -> bytes:
     r = 1
     r = _cover(ws3, r, f"DEMOGRAPHICS & MARKET OVERVIEW  |  {prop}", subtitle, n=6)
 
-    # ── A. Additional Income ──────────────────────────────────────────────────
-    add_inc = inv.get("additional_income") or []
-    if add_inc:
-        r = _sec(ws3, r, "A.  ADDITIONAL INCOME", n=6)
-        r = _thdr(ws3, r, ["Income Item","Category","Fee/Unit/Mo","Occ %",
-                            "Monthly Income","Current Annual","Pro Forma Annual","Calculation Detail"], n=6)
-        for i, inc in enumerate(add_inc):
-            r = _drow(ws3, r, [
-                inc.get("name") or "—", inc.get("category") or "—",
-                _v(inc.get("fee_per_unit_per_month"), "$") if inc.get("fee_per_unit_per_month") else "—",
-                inc.get("occupancy_assumption") or "—",
-                _v(inc.get("monthly_income"), "$") if inc.get("monthly_income") else "—",
-                _v(inc.get("current_annual"), "$") if inc.get("current_annual") else "—",
-                _v(inc.get("proforma_annual"), "$") if inc.get("proforma_annual") else "—",
-                inc.get("calculation_detail") or inc.get("notes") or "—",
-            ], alt=bool(i % 2), n=6,
-               als=["left","left","right","center","right","right","right","left"])
+    if _on('addinc'):
+        # ── A. Additional Income ──────────────────────────────────────────────────
+        add_inc = inv.get("additional_income") or []
+        if add_inc:
+            r = _sec(ws3, r, "A.  ADDITIONAL INCOME", n=6)
+            r = _thdr(ws3, r, ["Income Item","Category","Fee/Unit/Mo","Occ %",
+                                "Monthly Income","Current Annual","Pro Forma Annual","Calculation Detail"], n=6)
+            for i, inc in enumerate(add_inc):
+                r = _drow(ws3, r, [
+                    inc.get("name") or "—", inc.get("category") or "—",
+                    _v(inc.get("fee_per_unit_per_month"), "$") if inc.get("fee_per_unit_per_month") else "—",
+                    inc.get("occupancy_assumption") or "—",
+                    _v(inc.get("monthly_income"), "$") if inc.get("monthly_income") else "—",
+                    _v(inc.get("current_annual"), "$") if inc.get("current_annual") else "—",
+                    _v(inc.get("proforma_annual"), "$") if inc.get("proforma_annual") else "—",
+                    inc.get("calculation_detail") or inc.get("notes") or "—",
+                ], alt=bool(i % 2), n=6,
+                   als=["left","left","right","center","right","right","right","left"])
+            r = _sp(ws3, r)
+
+    if _on('utilities'):
+        # ── B. Utilities ──────────────────────────────────────────────────────────
+        r = _sec(ws3, r, "B.  UTILITY INFORMATION", n=6)
+        if utils_:
+            r = _thdr(ws3, r, ["Utility","Billing Method","Paid By","Reimbursement","Annual Income","Notes"], n=6)
+            for i, u in enumerate(utils_):
+                r = _drow(ws3, r, [
+                    u.get("name","—"), u.get("method") or "—", u.get("paid_by") or "—",
+                    u.get("reimbursement") or "N/A",
+                    _v(u.get("annual_income"), "$"), u.get("notes") or "—",
+                ], alt=bool(i % 2), als=["left","center","center","left","right","left"], n=6)
+        else:
+            r = _kv(ws3, r, "Note", "No utility data found in OM.", n=6)
         r = _sp(ws3, r)
 
-    # ── B. Utilities ──────────────────────────────────────────────────────────
-    r = _sec(ws3, r, "B.  UTILITY INFORMATION", n=6)
-    if utils_:
-        r = _thdr(ws3, r, ["Utility","Billing Method","Paid By","Reimbursement","Annual Income","Notes"], n=6)
-        for i, u in enumerate(utils_):
-            r = _drow(ws3, r, [
-                u.get("name","—"), u.get("method") or "—", u.get("paid_by") or "—",
-                u.get("reimbursement") or "N/A",
-                _v(u.get("annual_income"), "$"), u.get("notes") or "—",
-            ], alt=bool(i % 2), als=["left","center","center","left","right","left"], n=6)
-    else:
-        r = _kv(ws3, r, "Note", "No utility data found in OM.", n=6)
-    r = _sp(ws3, r)
+    if _on('pop'):
+        # ── C. Population & Income ────────────────────────────────────────────────
+        r = _sec(ws3, r, "C.  POPULATION & INCOME DEMOGRAPHICS", n=6)
+        has_demo = any(demo.get(k) for k in ["pop_1mi","pop_3mi","pop_5mi","median_income_3mi"])
+        if not has_demo:
+            _fr(ws3, r, 6, C_WARN)
+            _sc(ws3, r, 1, "Detailed 1-mile / 3-mile / 5-mile radius demographic data not provided in this OM. Source independently from CoStar, Esri, or census.gov.",
+                bg=C_WARN, fg=C_LABEL, size=9, bold=True, wrap=True)
+            ws3.row_dimensions[r].height = 30; r += 1; r = _sp(ws3, r)
 
-    # ── C. Population & Income ────────────────────────────────────────────────
-    r = _sec(ws3, r, "C.  POPULATION & INCOME DEMOGRAPHICS", n=6)
-    has_demo = any(demo.get(k) for k in ["pop_1mi","pop_3mi","pop_5mi","median_income_3mi"])
-    if not has_demo:
-        _fr(ws3, r, 6, C_WARN)
-        _sc(ws3, r, 1, "Detailed 1-mile / 3-mile / 5-mile radius demographic data not provided in this OM. Source independently from CoStar, Esri, or census.gov.",
-            bg=C_WARN, fg=C_LABEL, size=9, bold=True, wrap=True)
-        ws3.row_dimensions[r].height = 30; r += 1; r = _sp(ws3, r)
-
-    r = _thdr(ws3, r, ["Metric","1-Mile Radius","3-Mile Radius","5-Mile Radius","Notes"], n=6)
-    for i, (metric, v1, v3, v5, note) in enumerate([
-        ("Population (2025)",        _v(demo.get("pop_1mi"),"n"),  _v(demo.get("pop_3mi"),"n"),  _v(demo.get("pop_5mi"),"n"),  ""),
-        ("Population (2030 Proj.)",  _v(demo.get("pop_2030_1mi"),"n"), _v(demo.get("pop_2030_3mi"),"n"), _v(demo.get("pop_2030_5mi"),"n"), ""),
-        ("Population Growth (5-yr)", demo.get("pop_growth_1mi") or "—", demo.get("pop_growth_3mi") or "—", demo.get("pop_growth_5mi") or "—", ""),
-        ("Median HH Income (2025)",  _v(demo.get("median_income_1mi"),"$"), _v(demo.get("median_income_3mi"),"$"), _v(demo.get("median_income_5mi"),"$"), ""),
-        ("Median HH Income (2030)",  _v(demo.get("median_income_2030_1mi"),"$"), _v(demo.get("median_income_2030_3mi"),"$"), _v(demo.get("median_income_2030_5mi"),"$"), ""),
-        ("Income Growth (5-yr)",     demo.get("income_growth_1mi") or "—", demo.get("income_growth_3mi") or "—", demo.get("income_growth_5mi") or "—", ""),
-        ("Renter-Occupied Units",    demo.get("renter_pct_1mi") or "—", demo.get("renter_pct_3mi") or "—", demo.get("renter_pct_5mi") or "—", ""),
-        ("Bachelor's Degree+",       demo.get("college_pct_1mi") or "—", demo.get("college_pct_3mi") or "—", demo.get("college_pct_5mi") or "—", ""),
-        ("White-Collar Workers",     demo.get("white_collar_pct_1mi") or "—", demo.get("white_collar_pct_3mi") or "—", demo.get("white_collar_pct_5mi") or "—", ""),
-        ("Avg Home Value",           "—", _v(demo.get("home_value"),"$"), "—", ""),
-    ]):
-        bg = C_ALT if bool(i % 2) else C_WHITE
-        _fr(ws3, r, 6, bg)
-        _sc(ws3, r, 1, metric, bold=True, fg=C_LABEL, bg=bg, size=9)
-        _sc(ws3, r, 2, v1, fg=C_BLUE_IN, bg=bg, size=9, ha="right")
-        _sc(ws3, r, 3, v3, fg=C_BLUE_IN, bg=bg, size=9, ha="right")
-        _sc(ws3, r, 4, v5, fg=C_BLUE_IN, bg=bg, size=9, ha="right")
-        _sc(ws3, r, 5, note, fg=C_BODY, bg=bg, size=9, wrap=True)
-        ws3.cell(row=r, column=6).fill = PatternFill("solid", fgColor=bg)
-        ws3.row_dimensions[r].height = 16; r += 1
-    r = _sp(ws3, r)
-
-    # ── D. Affordability ──────────────────────────────────────────────────────
-    r = _sec(ws3, r, "D.  AFFORDABILITY & RENT GROWTH RUNWAY", n=6)
-    r = _thdr(ws3, r, ["Metric","2025 (3-Mile)","2030 Proj. (3-Mile)","Notes"], n=6)
-    for i, (metric, v25, v30, note) in enumerate([
-        ("Current In-Place Rent",          _v(afford.get("current_rent"),"$"), "—", "Subject effective rent"),
-        ("Avg HH Income",                  _v(afford.get("avg_hh_income_3mi"),"$"), _v(afford.get("avg_hh_income_2030_3mi"),"$"), ""),
-        ("Monthly Affordability (3× rule)",_v(afford.get("monthly_affordability_3x"),"$"), _v(afford.get("monthly_affordability_2030_3x"),"$"), "Income ÷ 12 ÷ 3"),
-        ("Rent Headroom",                  _v(afford.get("rent_headroom_3mi"),"$"), _v(afford.get("rent_headroom_2030_3mi"),"$"), "Threshold minus current rent"),
-        ("Income-to-Rent Ratio",           afford.get("income_to_rent_ratio") or "—", "—", ""),
-    ]):
-        bg = C_ALT if bool(i % 2) else C_WHITE
-        _fr(ws3, r, 6, bg)
-        _sc(ws3, r, 1, metric, bold=True, fg=C_LABEL, bg=bg, size=9)
-        _sc(ws3, r, 2, v25, fg=C_BLUE_IN, bg=bg, size=9, ha="right")
-        _sc(ws3, r, 3, v30, fg=C_BLUE_IN, bg=bg, size=9, ha="right")
-        _sc(ws3, r, 4, note, fg=C_BODY, bg=bg, size=9)
-        ws3.cell(row=r, column=5).fill = PatternFill("solid", fgColor=bg)
-        ws3.cell(row=r, column=6).fill = PatternFill("solid", fgColor=bg)
-        ws3.row_dimensions[r].height = 16; r += 1
-    r = _sp(ws3, r)
-
-    # ── E. Schools & Crime ────────────────────────────────────────────────────
-    r = _sec(ws3, r, "E.  SCHOOLS, CRIME & QUALITY OF LIFE", n=6)
-    r = _shdr(ws3, r, "Assigned Schools  (source: greatschools.org)", n=6)
-    for i, (k, v) in enumerate([
-        ("School District", demo.get("school_district") or "Not provided — verify via district map"),
-        ("Elementary",      demo.get("elementary") or "Not provided — verify via district map"),
-        ("Middle School",   demo.get("middle") or "Not provided — verify via district map"),
-        ("High School",     demo.get("high_school") or "Not provided — verify via district map"),
-    ]):
-        r = _kv(ws3, r, k, v, alt=bool(i % 2), n=6)
-    r = _shdr(ws3, r, "Crime  (source: crimegrade.org)", n=6)
-    r = _kv(ws3, r, "Crime Data", demo.get("crime") or "Not provided in OM — source independently at crimegrade.org", n=6)
-    r = _sp(ws3, r)
-
-    # ── F. Site Info ──────────────────────────────────────────────────────────
-    r = _sec(ws3, r, "F.  SITE & CONSTRUCTION INFORMATION", n=6)
-    r = _shdr(ws3, r, "Physical Plant", n=6)
-    for i, (k, v) in enumerate([
-        ("Roof / Age",     f"{site.get('roof') or 'N/A'}  —  {site.get('roof_age') or 'N/A'}"),
-        ("Exterior",       site.get("exterior")),
-        ("Foundation",     site.get("foundation")),
-        ("HVAC",           site.get("hvac")),
-        ("Plumbing",       site.get("plumbing")),
-        ("Wiring",         site.get("wiring")),
-        ("Hot Water",      site.get("hot_water")),
-        ("Washer / Dryer", site.get("washer_dryer")),
-        ("Life Safety",    site.get("life_safety") or "Verify — not specified"),
-        ("Construction",   site.get("notes")),
-    ]):
-        if v: r = _kv(ws3, r, k, v, alt=bool(i % 2), n=6)
-    r = _shdr(ws3, r, "Parking & Site Features", n=6)
-    for i, (k, v) in enumerate([
-        ("Open Spaces",  _v(site.get("parking_open"), "n")),
-        ("Covered",      _v(site.get("parking_covered"), "n")),
-        ("Garage",       site.get("parking_garage") or "None"),
-        ("Total / Ratio",f"{_v(site.get('parking_total'), 'n')} ({site.get('parking_ratio') or 'N/A'})"),
-        ("Pet Yards",    site.get("pet_yards") or "N/A"),
-        ("Storage",      site.get("storage") or "N/A"),
-    ]):
-        r = _kv(ws3, r, k, v, alt=bool(i % 2), n=6)
-    r = _sp(ws3, r)
-
-    # ── G. Major Employers ────────────────────────────────────────────────────
-    employers = demo.get("employers") or []
-    r = _sec(ws3, r, "G.  MAJOR EMPLOYERS & ECONOMIC DRIVERS", n=6)
-    if employers and any(e.get("name") for e in employers):
-        r = _thdr(ws3, r, ["Employer / Institution","Drive Time","Employees","Sector","Notes"], n=6)
-        for i, e in enumerate(employers):
-            if e.get("name"):
-                r = _drow(ws3, r, [
-                    e.get("name","—"), e.get("drive") or "—", e.get("employees") or "—",
-                    e.get("sector") or "—", e.get("notes") or "—",
-                ], alt=bool(i % 2), als=["left","center","center","left","left"], h=22, n=6)
-    else:
-        r = _kv(ws3, r, "Note", "No employer data found in OM — source from CoStar or broker.", n=6)
-    r = _sp(ws3, r)
-
-    # ── H. Market & Submarket Overview ────────────────────────────────────────
-    r = _sec(ws3, r, "H.  MARKET & SUBMARKET OVERVIEW", n=6)
-    if mkt.get("market_summary"):
-        r = _shdr(ws3, r, "Market Narrative", n=6)
-        _fr(ws3, r, 6, C_WHITE)
-        _sc(ws3, r, 1, mkt["market_summary"], bg=C_WHITE, fg=C_BODY, size=9, wrap=True)
-        ws3.row_dimensions[r].height = 45; r += 1; r = _sp(ws3, r)
-
-    r = _shdr(ws3, r, "Submarket Metrics", n=6)
-    for i, (k, v) in enumerate([
-        ("Submarket",         mkt.get("submarket")),
-        ("Sub. Occupancy",    mkt.get("sub_occupancy")),
-        ("Sub. Avg Rent",     _v(mkt.get("sub_rent"), "$")),
-        ("Sub. Rent Growth",  mkt.get("sub_growth")),
-        ("Metro Inventory",   mkt.get("metro_inventory")),
-        ("Metro Occupancy",   mkt.get("metro_occupancy")),
-    ]):
-        if v: r = _kv(ws3, r, k, v, alt=bool(i % 2), n=6)
-
-    # ── I. Supply & Demand ────────────────────────────────────────────────────
-    r = _sp(ws3, r)
-    r = _sec(ws3, r, "I.  SUPPLY & DEMAND", n=6)
-    r = _thdr(ws3, r, ["Metric","Value","Notes"], n=6)
-    supply_rows = [
-        ("Pipeline Units (Under Construction)", _v(mkt.get("pipeline"), "n"),    "Units currently under construction in submarket"),
-        ("Absorption (Units / Year)",           _v(mkt.get("absorption"), "n"),   "Annual net absorption in submarket"),
-        ("Investment Volume",                   mkt.get("investment_vol") or "—", "Total multifamily investment volume"),
-    ]
-    for i, (k, v, note) in enumerate(supply_rows):
-        if v and v != "N/A":
+        r = _thdr(ws3, r, ["Metric","1-Mile Radius","3-Mile Radius","5-Mile Radius","Notes"], n=6)
+        for i, (metric, v1, v3, v5, note) in enumerate([
+            ("Population (2025)",        _v(demo.get("pop_1mi"),"n"),  _v(demo.get("pop_3mi"),"n"),  _v(demo.get("pop_5mi"),"n"),  ""),
+            ("Population (2030 Proj.)",  _v(demo.get("pop_2030_1mi"),"n"), _v(demo.get("pop_2030_3mi"),"n"), _v(demo.get("pop_2030_5mi"),"n"), ""),
+            ("Population Growth (5-yr)", demo.get("pop_growth_1mi") or "—", demo.get("pop_growth_3mi") or "—", demo.get("pop_growth_5mi") or "—", ""),
+            ("Median HH Income (2025)",  _v(demo.get("median_income_1mi"),"$"), _v(demo.get("median_income_3mi"),"$"), _v(demo.get("median_income_5mi"),"$"), ""),
+            ("Median HH Income (2030)",  _v(demo.get("median_income_2030_1mi"),"$"), _v(demo.get("median_income_2030_3mi"),"$"), _v(demo.get("median_income_2030_5mi"),"$"), ""),
+            ("Income Growth (5-yr)",     demo.get("income_growth_1mi") or "—", demo.get("income_growth_3mi") or "—", demo.get("income_growth_5mi") or "—", ""),
+            ("Renter-Occupied Units",    demo.get("renter_pct_1mi") or "—", demo.get("renter_pct_3mi") or "—", demo.get("renter_pct_5mi") or "—", ""),
+            ("Bachelor's Degree+",       demo.get("college_pct_1mi") or "—", demo.get("college_pct_3mi") or "—", demo.get("college_pct_5mi") or "—", ""),
+            ("White-Collar Workers",     demo.get("white_collar_pct_1mi") or "—", demo.get("white_collar_pct_3mi") or "—", demo.get("white_collar_pct_5mi") or "—", ""),
+            ("Avg Home Value",           "—", _v(demo.get("home_value"),"$"), "—", ""),
+        ]):
             bg = C_ALT if bool(i % 2) else C_WHITE
             _fr(ws3, r, 6, bg)
-            _sc(ws3, r, 1, k,    bold=True, fg=C_LABEL,   bg=bg, size=9)
-            _sc(ws3, r, 2, v,    fg=C_BLUE_IN, bg=bg, size=9, ha="right")
-            _sc(ws3, r, 3, note, fg=C_BODY,    bg=bg, size=9, wrap=True)
-            ws3.cell(row=r, column=4).fill = PatternFill("solid", fgColor=bg)
+            _sc(ws3, r, 1, metric, bold=True, fg=C_LABEL, bg=bg, size=9)
+            _sc(ws3, r, 2, v1, fg=C_BLUE_IN, bg=bg, size=9, ha="right")
+            _sc(ws3, r, 3, v3, fg=C_BLUE_IN, bg=bg, size=9, ha="right")
+            _sc(ws3, r, 4, v5, fg=C_BLUE_IN, bg=bg, size=9, ha="right")
+            _sc(ws3, r, 5, note, fg=C_BODY, bg=bg, size=9, wrap=True)
+            ws3.cell(row=r, column=6).fill = PatternFill("solid", fgColor=bg)
+            ws3.row_dimensions[r].height = 16; r += 1
+        r = _sp(ws3, r)
+
+    if _on('afford'):
+        # ── D. Affordability ──────────────────────────────────────────────────────
+        r = _sec(ws3, r, "D.  AFFORDABILITY & RENT GROWTH RUNWAY", n=6)
+        r = _thdr(ws3, r, ["Metric","2025 (3-Mile)","2030 Proj. (3-Mile)","Notes"], n=6)
+        for i, (metric, v25, v30, note) in enumerate([
+            ("Current In-Place Rent",          _v(afford.get("current_rent"),"$"), "—", "Subject effective rent"),
+            ("Avg HH Income",                  _v(afford.get("avg_hh_income_3mi"),"$"), _v(afford.get("avg_hh_income_2030_3mi"),"$"), ""),
+            ("Monthly Affordability (3× rule)",_v(afford.get("monthly_affordability_3x"),"$"), _v(afford.get("monthly_affordability_2030_3x"),"$"), "Income ÷ 12 ÷ 3"),
+            ("Rent Headroom",                  _v(afford.get("rent_headroom_3mi"),"$"), _v(afford.get("rent_headroom_2030_3mi"),"$"), "Threshold minus current rent"),
+            ("Income-to-Rent Ratio",           afford.get("income_to_rent_ratio") or "—", "—", ""),
+        ]):
+            bg = C_ALT if bool(i % 2) else C_WHITE
+            _fr(ws3, r, 6, bg)
+            _sc(ws3, r, 1, metric, bold=True, fg=C_LABEL, bg=bg, size=9)
+            _sc(ws3, r, 2, v25, fg=C_BLUE_IN, bg=bg, size=9, ha="right")
+            _sc(ws3, r, 3, v30, fg=C_BLUE_IN, bg=bg, size=9, ha="right")
+            _sc(ws3, r, 4, note, fg=C_BODY, bg=bg, size=9)
             ws3.cell(row=r, column=5).fill = PatternFill("solid", fgColor=bg)
             ws3.cell(row=r, column=6).fill = PatternFill("solid", fgColor=bg)
             ws3.row_dimensions[r].height = 16; r += 1
-
-    devs = mkt.get("major_developments") or []
-    if devs and any(d.get("name") for d in devs):
         r = _sp(ws3, r)
-        r = _shdr(ws3, r, "Pipeline Developments", n=6)
-        r = _thdr(ws3, r, ["Development","Description","Est. Cost","Jobs","Timeline"], n=6)
-        for i, dev in enumerate(devs):
-            if dev.get("name"):
-                r = _drow(ws3, r, [
-                    dev.get("name","—"), dev.get("description") or "—",
-                    dev.get("cost") or "—", dev.get("jobs") or "—",
-                    dev.get("timeline") or "—",
-                ], alt=bool(i % 2), als=["left","left","right","center","left"], h=25, n=6)
-    r = _sp(ws3, r)
+
+    if _on('schools'):
+        # ── E. Schools & Crime ────────────────────────────────────────────────────
+        r = _sec(ws3, r, "E.  SCHOOLS, CRIME & QUALITY OF LIFE", n=6)
+        r = _shdr(ws3, r, "Assigned Schools  (source: greatschools.org)", n=6)
+        for i, (k, v) in enumerate([
+            ("School District", demo.get("school_district") or "Not provided — verify via district map"),
+            ("Elementary",      demo.get("elementary") or "Not provided — verify via district map"),
+            ("Middle School",   demo.get("middle") or "Not provided — verify via district map"),
+            ("High School",     demo.get("high_school") or "Not provided — verify via district map"),
+        ]):
+            r = _kv(ws3, r, k, v, alt=bool(i % 2), n=6)
+        r = _shdr(ws3, r, "Crime  (source: crimegrade.org)", n=6)
+        r = _kv(ws3, r, "Crime Data", demo.get("crime") or "Not provided in OM — source independently at crimegrade.org", n=6)
+        r = _sp(ws3, r)
+
+    if _on('utilities'):
+        # ── F. Site Info ──────────────────────────────────────────────────────────
+        r = _sec(ws3, r, "F.  SITE & CONSTRUCTION INFORMATION", n=6)
+        r = _shdr(ws3, r, "Physical Plant", n=6)
+        for i, (k, v) in enumerate([
+            ("Roof / Age",     f"{site.get('roof') or 'N/A'}  —  {site.get('roof_age') or 'N/A'}"),
+            ("Exterior",       site.get("exterior")),
+            ("Foundation",     site.get("foundation")),
+            ("HVAC",           site.get("hvac")),
+            ("Plumbing",       site.get("plumbing")),
+            ("Wiring",         site.get("wiring")),
+            ("Hot Water",      site.get("hot_water")),
+            ("Washer / Dryer", site.get("washer_dryer")),
+            ("Life Safety",    site.get("life_safety") or "Verify — not specified"),
+            ("Construction",   site.get("notes")),
+        ]):
+            if v: r = _kv(ws3, r, k, v, alt=bool(i % 2), n=6)
+        r = _shdr(ws3, r, "Parking & Site Features", n=6)
+        for i, (k, v) in enumerate([
+            ("Open Spaces",  _v(site.get("parking_open"), "n")),
+            ("Covered",      _v(site.get("parking_covered"), "n")),
+            ("Garage",       site.get("parking_garage") or "None"),
+            ("Total / Ratio",f"{_v(site.get('parking_total'), 'n')} ({site.get('parking_ratio') or 'N/A'})"),
+            ("Pet Yards",    site.get("pet_yards") or "N/A"),
+            ("Storage",      site.get("storage") or "N/A"),
+        ]):
+            r = _kv(ws3, r, k, v, alt=bool(i % 2), n=6)
+        r = _sp(ws3, r)
+
+    if _on('employers'):
+        # ── G. Major Employers ────────────────────────────────────────────────────
+        employers = demo.get("employers") or []
+        r = _sec(ws3, r, "G.  MAJOR EMPLOYERS & ECONOMIC DRIVERS", n=6)
+        if employers and any(e.get("name") for e in employers):
+            r = _thdr(ws3, r, ["Employer / Institution","Drive Time","Employees","Sector","Notes"], n=6)
+            for i, e in enumerate(employers):
+                if e.get("name"):
+                    r = _drow(ws3, r, [
+                        e.get("name","—"), e.get("drive") or "—", e.get("employees") or "—",
+                        e.get("sector") or "—", e.get("notes") or "—",
+                    ], alt=bool(i % 2), als=["left","center","center","left","left"], h=22, n=6)
+        else:
+            r = _kv(ws3, r, "Note", "No employer data found in OM — source from CoStar or broker.", n=6)
+        r = _sp(ws3, r)
+
+    if _on('market'):
+        # ── H. Market & Submarket Overview ────────────────────────────────────────
+        r = _sec(ws3, r, "H.  MARKET & SUBMARKET OVERVIEW", n=6)
+        if mkt.get("market_summary"):
+            r = _shdr(ws3, r, "Market Narrative", n=6)
+            _fr(ws3, r, 6, C_WHITE)
+            _sc(ws3, r, 1, mkt["market_summary"], bg=C_WHITE, fg=C_BODY, size=9, wrap=True)
+            ws3.row_dimensions[r].height = 45; r += 1; r = _sp(ws3, r)
+
+        r = _shdr(ws3, r, "Submarket Metrics", n=6)
+        for i, (k, v) in enumerate([
+            ("Submarket",         mkt.get("submarket")),
+            ("Sub. Occupancy",    mkt.get("sub_occupancy")),
+            ("Sub. Avg Rent",     _v(mkt.get("sub_rent"), "$")),
+            ("Sub. Rent Growth",  mkt.get("sub_growth")),
+            ("Metro Inventory",   mkt.get("metro_inventory")),
+            ("Metro Occupancy",   mkt.get("metro_occupancy")),
+        ]):
+            if v: r = _kv(ws3, r, k, v, alt=bool(i % 2), n=6)
+
+    if _on('market'):
+        # ── I. Supply & Demand ────────────────────────────────────────────────────
+        r = _sp(ws3, r)
+        r = _sec(ws3, r, "I.  SUPPLY & DEMAND", n=6)
+        r = _thdr(ws3, r, ["Metric","Value","Notes"], n=6)
+        supply_rows = [
+            ("Pipeline Units (Under Construction)", _v(mkt.get("pipeline"), "n"),    "Units currently under construction in submarket"),
+            ("Absorption (Units / Year)",           _v(mkt.get("absorption"), "n"),   "Annual net absorption in submarket"),
+            ("Investment Volume",                   mkt.get("investment_vol") or "—", "Total multifamily investment volume"),
+        ]
+        for i, (k, v, note) in enumerate(supply_rows):
+            if v and v != "N/A":
+                bg = C_ALT if bool(i % 2) else C_WHITE
+                _fr(ws3, r, 6, bg)
+                _sc(ws3, r, 1, k,    bold=True, fg=C_LABEL,   bg=bg, size=9)
+                _sc(ws3, r, 2, v,    fg=C_BLUE_IN, bg=bg, size=9, ha="right")
+                _sc(ws3, r, 3, note, fg=C_BODY,    bg=bg, size=9, wrap=True)
+                ws3.cell(row=r, column=4).fill = PatternFill("solid", fgColor=bg)
+                ws3.cell(row=r, column=5).fill = PatternFill("solid", fgColor=bg)
+                ws3.cell(row=r, column=6).fill = PatternFill("solid", fgColor=bg)
+                ws3.row_dimensions[r].height = 16; r += 1
+
+        devs = mkt.get("major_developments") or []
+        if devs and any(d.get("name") for d in devs):
+            r = _sp(ws3, r)
+            r = _shdr(ws3, r, "Pipeline Developments", n=6)
+            r = _thdr(ws3, r, ["Development","Description","Est. Cost","Jobs","Timeline"], n=6)
+            for i, dev in enumerate(devs):
+                if dev.get("name"):
+                    r = _drow(ws3, r, [
+                        dev.get("name","—"), dev.get("description") or "—",
+                        dev.get("cost") or "—", dev.get("jobs") or "—",
+                        dev.get("timeline") or "—",
+                    ], alt=bool(i % 2), als=["left","left","right","center","left"], h=25, n=6)
+        r = _sp(ws3, r)
 
     # Disclaimer
     _fr(ws3, r, 6, C_ALT)
@@ -1529,43 +1598,119 @@ st.markdown("""
 
 main_col, right_col = st.columns([2.2, 1], gap="small")
 
+
 with right_col:
-    st.markdown("""
-<div class="rv-right-panel">
-  <div class="rv-panel-heading">What's in the Report</div>
-  <div class="rv-panel-heading" style="margin-top:14px;">Tab 1 — Financials</div>
-  <div class="rv-bullet"><div class="rv-bullet-dot"></div><div class="rv-bullet-txt">Deal summary &amp; property details</div></div>
-  <div class="rv-bullet"><div class="rv-bullet-dot"></div><div class="rv-bullet-txt">Unit mix with rent upside</div></div>
-  <div class="rv-bullet"><div class="rv-bullet-dot"></div><div class="rv-bullet-txt">Operating statement (all periods)</div></div>
-  <div class="rv-bullet"><div class="rv-bullet-dot"></div><div class="rv-bullet-txt">Value-add by floor plan &amp; revenue levers</div></div>
-  <div class="rv-bullet"><div class="rv-bullet-dot"></div><div class="rv-bullet-txt">Financing &amp; debt terms (incl. IO period)</div></div>
-  <div class="rv-bullet"><div class="rv-bullet-dot"></div><div class="rv-bullet-txt">Underwriting flags</div></div>
-  <div class="rv-bullet"><div class="rv-bullet-dot"></div><div class="rv-bullet-txt">Property tax &amp; abatement</div></div>
-  <div class="rv-bullet"><div class="rv-bullet-dot"></div><div class="rv-bullet-txt">Replacement cost, insurance &amp; management</div></div>
-  <hr class="rv-divider">
-  <div class="rv-panel-heading">Tab 2 — Comparables</div>
-  <div class="rv-bullet"><div class="rv-bullet-dot"></div><div class="rv-bullet-txt">Garden &amp; townhouse rent comps</div></div>
-  <div class="rv-bullet"><div class="rv-bullet-dot"></div><div class="rv-bullet-txt">Additional income opportunities</div></div>
-  <div class="rv-bullet"><div class="rv-bullet-dot"></div><div class="rv-bullet-txt">Sale comparables with buyer/seller</div></div>
-  <hr class="rv-divider">
-  <div class="rv-panel-heading">Tab 3 — Demographics</div>
-  <div class="rv-bullet"><div class="rv-bullet-dot"></div><div class="rv-bullet-txt">Additional income</div></div>
-  <div class="rv-bullet"><div class="rv-bullet-dot"></div><div class="rv-bullet-txt">Utilities &amp; site information</div></div>
-  <div class="rv-bullet"><div class="rv-bullet-dot"></div><div class="rv-bullet-txt">Population &amp; income (1-mi / 3-mi / 5-mi)</div></div>
-  <div class="rv-bullet"><div class="rv-bullet-dot"></div><div class="rv-bullet-txt">Affordability analysis</div></div>
-  <div class="rv-bullet"><div class="rv-bullet-dot"></div><div class="rv-bullet-txt">Schools, crime &amp; quality of life</div></div>
-  <div class="rv-bullet"><div class="rv-bullet-dot"></div><div class="rv-bullet-txt">Major employers &amp; economic drivers</div></div>
-  <div class="rv-bullet"><div class="rv-bullet-dot"></div><div class="rv-bullet-txt">Market &amp; submarket overview</div></div>
-  <div class="rv-bullet"><div class="rv-bullet-dot"></div><div class="rv-bullet-txt">Supply &amp; demand / pipeline</div></div>
-  <hr class="rv-divider">
-  <div class="rv-panel-heading">Supported Brokers</div>
-  <div class="rv-brokers">JLL · CBRE · Marcus &amp; Millichap · Cushman &amp; Wakefield · Newmark · Colliers · Berkadia · Walker &amp; Dunlop · Northmarq</div>
-  <hr class="rv-divider">
-  <div class="rv-meta">Processing time: <span>30–90 sec</span></div>
-  <div class="rv-meta">Max file size: <span>50 MB</span></div>
-  <div class="rv-meta">Output: <span>3-tab Excel (.xlsx)</span></div>
+    _keys = ["deal","unitmix","opstat","valueadd","financing","flags","tax","repl",
+             "rentcomps","addinc2","salecomps","addinc","utilities","pop","afford",
+             "schools","employers","market"]
+    for k in _keys:
+        if "sel_"+k not in st.session_state:
+            st.session_state["sel_"+k] = True
+
+    # Handle select/deselect all via query params
+    qp = st.query_params
+    if qp.get("_action") == "selall":
+        for k in _keys: st.session_state["sel_"+k] = True
+        st.query_params.clear()
+        st.rerun()
+    if qp.get("_action") == "deselall":
+        for k in _keys: st.session_state["sel_"+k] = False
+        st.query_params.clear()
+        st.rerun()
+    for k in _keys:
+        if qp.get("_tog") == k:
+            st.session_state["sel_"+k] = not st.session_state.get("sel_"+k, True)
+            st.query_params.clear()
+            st.rerun()
+
+    sel_deal=st.session_state["sel_deal"]; sel_unitmix=st.session_state["sel_unitmix"]
+    sel_opstat=st.session_state["sel_opstat"]; sel_valueadd=st.session_state["sel_valueadd"]
+    sel_financing=st.session_state["sel_financing"]; sel_flags=st.session_state["sel_flags"]
+    sel_tax=st.session_state["sel_tax"]; sel_repl=st.session_state["sel_repl"]
+    sel_rentcomps=st.session_state["sel_rentcomps"]; sel_addinc2=st.session_state["sel_addinc2"]
+    sel_salecomps=st.session_state["sel_salecomps"]; sel_addinc=st.session_state["sel_addinc"]
+    sel_utilities=st.session_state["sel_utilities"]; sel_pop=st.session_state["sel_pop"]
+    sel_afford=st.session_state["sel_afford"]; sel_schools=st.session_state["sel_schools"]
+    sel_employers=st.session_state["sel_employers"]; sel_market=st.session_state["sel_market"]
+
+    _n_sel = sum([sel_deal,sel_unitmix,sel_opstat,sel_valueadd,sel_financing,
+                  sel_flags,sel_tax,sel_repl,sel_rentcomps,sel_addinc2,sel_salecomps,
+                  sel_addinc,sel_utilities,sel_pop,sel_afford,sel_schools,sel_employers,sel_market])
+
+    def _c(k): return "rv-cb on" if st.session_state.get("sel_"+k,True) else "rv-cb"
+
+    _panel_html = f"""<style>
+[data-testid="stHorizontalBlock"]>div:last-child{{background:#091420!important;border-left:1px solid #1A2E42!important;padding:24px 18px 28px!important;margin-right:-5rem!important;min-height:100vh!important;}}
+.rvph{{font-size:10px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#1DC9A4;margin-bottom:8px;margin-top:16px;display:block;}}
+.rv-cb-row{{display:flex;align-items:flex-start;gap:9px;margin-bottom:7px;cursor:pointer;user-select:none;}}
+.rv-cb-row:hover .rv-cb-txt{{color:#8ABDD0!important;}}
+.rv-cb{{width:14px;height:14px;border:1.5px solid #2A5070;border-radius:3px;background:#0B1E30;flex-shrink:0;margin-top:2px;display:flex;align-items:center;justify-content:center;transition:.15s;}}
+.rv-cb.on{{background:#1DC9A4!important;border-color:#1DC9A4!important;}}
+.rv-cb.on::after{{content:\'\';display:block;width:3px;height:6px;border:2px solid #0D1B2A;border-top:none;border-left:none;transform:rotate(45deg) translate(1px,-1px);}}
+.rv-cb-txt{{font-size:12px;color:#5A8FAA;line-height:1.4;}}
+.rvdiv{{border:none;border-top:1px solid #152030;margin:10px 0 8px;}}
+.rv-btn-row{{display:flex;gap:6px;margin-top:10px;}}
+.rv-btn{{flex:1;background:#0F2133;border:1px solid #1A3250;color:#1DC9A4;border-radius:6px;padding:7px 0;font-size:11px;font-weight:600;cursor:pointer;text-align:center;text-decoration:none;display:block;}}
+.rv-btn:hover{{background:#1DC9A420;}}
+.rv-sc{{font-size:11px;color:#3A6080;margin-top:7px;text-align:center;}}
+.rvmeta{{font-size:10px;color:#2A4860;margin-top:4px;}}
+.rvmeta span{{color:#4A7090;}}
+.rvbrok{{font-size:10px;color:#2A4860;line-height:1.8;margin-top:4px;}}
+</style>
+<div class="rvph" style="margin-top:0;">What's in the Report</div>
+<div class="rvph" style="margin-top:12px;">Tab 1 — Financials</div>
+<div class="rv-cb-row" onclick="tog('deal')"><div class="{_c('deal')}" id="cb_deal"></div><div class="rv-cb-txt">Deal summary &amp; property details</div></div>
+<div class="rv-cb-row" onclick="tog('unitmix')"><div class="{_c('unitmix')}" id="cb_unitmix"></div><div class="rv-cb-txt">Unit mix with rent upside</div></div>
+<div class="rv-cb-row" onclick="tog('opstat')"><div class="{_c('opstat')}" id="cb_opstat"></div><div class="rv-cb-txt">Operating statement (all periods)</div></div>
+<div class="rv-cb-row" onclick="tog('valueadd')"><div class="{_c('valueadd')}" id="cb_valueadd"></div><div class="rv-cb-txt">Value-add by floor plan &amp; revenue levers</div></div>
+<div class="rv-cb-row" onclick="tog('financing')"><div class="{_c('financing')}" id="cb_financing"></div><div class="rv-cb-txt">Financing &amp; debt terms (incl. IO period)</div></div>
+<div class="rv-cb-row" onclick="tog('flags')"><div class="{_c('flags')}" id="cb_flags"></div><div class="rv-cb-txt">Underwriting flags</div></div>
+<div class="rv-cb-row" onclick="tog('tax')"><div class="{_c('tax')}" id="cb_tax"></div><div class="rv-cb-txt">Property tax &amp; abatement</div></div>
+<div class="rv-cb-row" onclick="tog('repl')"><div class="{_c('repl')}" id="cb_repl"></div><div class="rv-cb-txt">Replacement cost, insurance &amp; management</div></div>
+<div class="rvdiv"></div>
+<div class="rvph">Tab 2 — Comparables</div>
+<div class="rv-cb-row" onclick="tog('rentcomps')"><div class="{_c('rentcomps')}" id="cb_rentcomps"></div><div class="rv-cb-txt">Garden &amp; townhouse rent comps</div></div>
+<div class="rv-cb-row" onclick="tog('addinc2')"><div class="{_c('addinc2')}" id="cb_addinc2"></div><div class="rv-cb-txt">Additional income opportunities</div></div>
+<div class="rv-cb-row" onclick="tog('salecomps')"><div class="{_c('salecomps')}" id="cb_salecomps"></div><div class="rv-cb-txt">Sale comparables with buyer/seller</div></div>
+<div class="rvdiv"></div>
+<div class="rvph">Tab 3 — Demographics</div>
+<div class="rv-cb-row" onclick="tog('addinc')"><div class="{_c('addinc')}" id="cb_addinc"></div><div class="rv-cb-txt">Additional income</div></div>
+<div class="rv-cb-row" onclick="tog('utilities')"><div class="{_c('utilities')}" id="cb_utilities"></div><div class="rv-cb-txt">Utilities &amp; site information</div></div>
+<div class="rv-cb-row" onclick="tog('pop')"><div class="{_c('pop')}" id="cb_pop"></div><div class="rv-cb-txt">Population &amp; income (1-mi / 3-mi / 5-mi)</div></div>
+<div class="rv-cb-row" onclick="tog('afford')"><div class="{_c('afford')}" id="cb_afford"></div><div class="rv-cb-txt">Affordability analysis</div></div>
+<div class="rv-cb-row" onclick="tog('schools')"><div class="{_c('schools')}" id="cb_schools"></div><div class="rv-cb-txt">Schools, crime &amp; quality of life</div></div>
+<div class="rv-cb-row" onclick="tog('employers')"><div class="{_c('employers')}" id="cb_employers"></div><div class="rv-cb-txt">Major employers &amp; economic drivers</div></div>
+<div class="rv-cb-row" onclick="tog('market')"><div class="{_c('market')}" id="cb_market"></div><div class="rv-cb-txt">Market, submarket &amp; supply/demand</div></div>
+<div class="rvdiv"></div>
+<div class="rv-btn-row">
+  <a class="rv-btn" href="?_action=selall">✓ Select All</a>
+  <a class="rv-btn" href="?_action=deselall">✕ Deselect All</a>
 </div>
-""", unsafe_allow_html=True)
+<div class="rv-sc">{_n_sel} / 18 selected</div>
+<div class="rvdiv"></div>
+<div class="rvph">Supported Brokers</div>
+<div class="rvbrok">JLL · CBRE · Marcus &amp; Millichap · Cushman &amp; Wakefield · Newmark · Colliers · Berkadia · Walker &amp; Dunlop · Northmarq</div>
+<div class="rvdiv"></div>
+<div class="rvmeta">Processing time: <span>30–90 sec</span></div>
+<div class="rvmeta">Max file size: <span>50 MB</span></div>
+<div class="rvmeta">Output: <span>3-tab Excel (.xlsx)</span></div>
+<script>
+const KEYS=["deal","unitmix","opstat","valueadd","financing","flags","tax","repl","rentcomps","addinc2","salecomps","addinc","utilities","pop","afford","schools","employers","market"];
+function tog(k){{
+  const cb=document.getElementById("cb_"+k);
+  if(!cb)return;
+  const on=cb.classList.toggle("on");
+  const u=new URL(window.location.href);
+  u.searchParams.set("_tog",k);
+  window.location.href=u.toString();
+}}
+function upd(){{
+  const n=KEYS.filter(k=>document.getElementById("cb_"+k)?.classList.contains("on")).length;
+  const el=document.getElementById("rv_sc");
+  if(el)el.textContent=n+" / 18 selected";
+}}
+</script>"""
+    st.markdown(_panel_html, unsafe_allow_html=True)
 
 with main_col:
     st.markdown("""
@@ -1644,7 +1789,18 @@ with main_col:
             def log(msg): set_progress(55, msg)
             data = analyze_om(pdf_text, api_key, log)
             set_progress(75, "Generating Excel report…")
-            excel_bytes = build_excel(data, uploaded.name)
+            sections = {
+                "deal":      sel_deal,     "unitmix":   sel_unitmix,
+                "opstat":    sel_opstat,   "valueadd":  sel_valueadd,
+                "financing": sel_financing,"flags":     sel_flags,
+                "tax":       sel_tax,      "repl":      sel_repl,
+                "rentcomps": sel_rentcomps,"addinc2":   sel_addinc2,
+                "salecomps": sel_salecomps,"addinc":    sel_addinc,
+                "utilities": sel_utilities,"pop":       sel_pop,
+                "afford":    sel_afford,   "schools":   sel_schools,
+                "employers": sel_employers,"market":    sel_market,
+            }
+            excel_bytes = build_excel(data, uploaded.name, sections=sections)
             set_progress(100, "Done!")
             progress_bar.empty(); status_box.empty()
 
