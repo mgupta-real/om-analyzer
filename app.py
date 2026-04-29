@@ -104,19 +104,8 @@ section[data-testid="stSidebar"] { display: none !important; }
     min-height: 100vh !important;
 }
 /* ── Checkboxes ── */
-[data-testid="stCheckbox"],
-[data-testid="stCheckbox"] *,
-[data-testid="stCheckbox"] label,
-[data-testid="stCheckbox"] label *,
-[data-testid="stCheckbox"] > label,
-[data-testid="stCheckbox"] > label > div,
-[data-testid="stCheckbox"] > label > div *,
-[data-testid="stCheckbox"] [data-testid="stMarkdownContainer"],
-[data-testid="stCheckbox"] [data-testid="stMarkdownContainer"] * {
-    background: transparent !important;
-    background-color: transparent !important;
-}
 [data-testid="stCheckbox"] {
+    background: transparent !important;
     padding: 2px 0 3px !important;
 }
 [data-testid="stCheckbox"] label {
@@ -124,14 +113,10 @@ section[data-testid="stSidebar"] { display: none !important; }
     align-items: flex-start !important;
 }
 [data-testid="stCheckbox"] label p,
-[data-testid="stCheckbox"] label span,
-[data-testid="stCheckbox"] label div,
-[data-testid="stCheckbox"] [data-testid="stMarkdownContainer"] p {
+[data-testid="stCheckbox"] label span:not([data-testid]) {
     font-size: 12px !important;
     color: #5A8FAA !important;
     line-height: 1.4 !important;
-    background: transparent !important;
-    background-color: transparent !important;
 }
 [data-testid="stCheckbox"] input:checked ~ div,
 [data-testid="stCheckbox"] input:checked + div {
