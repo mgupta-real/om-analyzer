@@ -1596,16 +1596,24 @@ st.markdown("""
 main_col, right_col = st.columns([2.2, 1], gap="small")
 
 
-with right_col:
-    _keys = ["deal","unitmix","opstat","valueadd","financing","flags","tax","repl",
-             "rentcomps","addinc2","salecomps","addinc","utilities","pop","afford",
-             "schools","employers","market"]
+# ── Select All / Deselect All handled BEFORE columns ─────────────────────────
+_keys = ["deal","unitmix","opstat","valueadd","financing","flags","tax","repl",
+         "rentcomps","addinc2","salecomps","addinc","utilities","pop","afford",
+         "schools","employers","market"]
+for k in _keys:
+    if "sel_"+k not in st.session_state:
+        st.session_state["sel_"+k] = True
 
-    # Initialise only — never set widget keys manually after this point
+# Callbacks defined at module level — safe to call from any context
+def _cb_selall():
     for k in _keys:
-        if "sel_"+k not in st.session_state:
-            st.session_state["sel_"+k] = True
+        st.session_state["sel_"+k] = True
 
+def _cb_desall():
+    for k in _keys:
+        st.session_state["sel_"+k] = False
+
+with right_col:
     st.markdown('<div class="rvph" style="margin-top:0;">What\'s in the Report</div>', unsafe_allow_html=True)
     st.markdown('<div class="rvph2">Tab 1 — Financials</div>', unsafe_allow_html=True)
     st.checkbox("Deal summary & property details",          key="sel_deal")
@@ -1629,30 +1637,12 @@ with right_col:
     st.checkbox("Major employers & economic drivers",       key="sel_employers")
     st.checkbox("Market, submarket & supply/demand",        key="sel_market")
 
-    # Read directly from session_state
-    sel_deal=st.session_state["sel_deal"]; sel_unitmix=st.session_state["sel_unitmix"]
-    sel_opstat=st.session_state["sel_opstat"]; sel_valueadd=st.session_state["sel_valueadd"]
-    sel_financing=st.session_state["sel_financing"]; sel_flags=st.session_state["sel_flags"]
-    sel_tax=st.session_state["sel_tax"]; sel_repl=st.session_state["sel_repl"]
-    sel_rentcomps=st.session_state["sel_rentcomps"]; sel_addinc2=st.session_state["sel_addinc2"]
-    sel_salecomps=st.session_state["sel_salecomps"]; sel_addinc=st.session_state["sel_addinc"]
-    sel_utilities=st.session_state["sel_utilities"]; sel_pop=st.session_state["sel_pop"]
-    sel_afford=st.session_state["sel_afford"]; sel_schools=st.session_state["sel_schools"]
-    sel_employers=st.session_state["sel_employers"]; sel_market=st.session_state["sel_market"]
-
-    _n_sel = sum([sel_deal,sel_unitmix,sel_opstat,sel_valueadd,sel_financing,
-                  sel_flags,sel_tax,sel_repl,sel_rentcomps,sel_addinc2,sel_salecomps,
-                  sel_addinc,sel_utilities,sel_pop,sel_afford,sel_schools,sel_employers,sel_market])
-
+    _n_sel = sum(st.session_state.get("sel_"+k, True) for k in _keys)
     st.markdown(f'<div class="rvdiv"></div><div class="rvcnt">{_n_sel} / 18 selected</div>', unsafe_allow_html=True)
 
-    if st.button("✓  Select All", key="btn_sel", use_container_width=True):
-        for k in _keys: st.session_state["sel_"+k] = True
-        st.rerun()
-
-    if st.button("✕  Deselect All", key="btn_des", use_container_width=True):
-        for k in _keys: st.session_state["sel_"+k] = False
-        st.rerun()
+    # Use on_change callbacks — fires before rerun, no st.rerun() needed
+    st.button("✓  Select All",  key="btn_sel", use_container_width=True, on_click=_cb_selall)
+    st.button("✕  Deselect All", key="btn_des", use_container_width=True, on_click=_cb_desall)
 
     st.markdown(f"""
 <div class="rvdiv"></div>
@@ -1663,6 +1653,17 @@ with right_col:
 <div class="rvmeta">Max file size: <span>50 MB</span></div>
 <div class="rvmeta">Output: <span>3-tab Excel (.xlsx)</span></div>
 """, unsafe_allow_html=True)
+
+# Read values after right_col for use in main_col
+sel_deal=st.session_state["sel_deal"]; sel_unitmix=st.session_state["sel_unitmix"]
+sel_opstat=st.session_state["sel_opstat"]; sel_valueadd=st.session_state["sel_valueadd"]
+sel_financing=st.session_state["sel_financing"]; sel_flags=st.session_state["sel_flags"]
+sel_tax=st.session_state["sel_tax"]; sel_repl=st.session_state["sel_repl"]
+sel_rentcomps=st.session_state["sel_rentcomps"]; sel_addinc2=st.session_state["sel_addinc2"]
+sel_salecomps=st.session_state["sel_salecomps"]; sel_addinc=st.session_state["sel_addinc"]
+sel_utilities=st.session_state["sel_utilities"]; sel_pop=st.session_state["sel_pop"]
+sel_afford=st.session_state["sel_afford"]; sel_schools=st.session_state["sel_schools"]
+sel_employers=st.session_state["sel_employers"]; sel_market=st.session_state["sel_market"]
 
 with main_col:
     st.markdown("""
