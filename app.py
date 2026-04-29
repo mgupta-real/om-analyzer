@@ -117,7 +117,6 @@ section[data-testid="stSidebar"] { display: none !important; }
     font-size: 12px !important;
     color: #5A8FAA !important;
     line-height: 1.4 !important;
-    background: transparent !important;
 }
 [data-testid="stCheckbox"] input:checked ~ div,
 [data-testid="stCheckbox"] input:checked + div {
