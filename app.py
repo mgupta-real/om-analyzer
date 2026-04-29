@@ -73,11 +73,11 @@ section[data-testid="stSidebar"] { display: none !important; }
 .rv-section-label-line { flex: 1; height: 1px; background: #1A2E42; }
 
 .rv-upload-card {
-    background: #0F2438; border: 1px solid #1A3250; border-radius: 14px;
-    padding: 32px 34px 26px; margin-bottom: 10px;
+    background: #0F2438; border: 1px solid #1A3250; border-radius: 12px;
+    padding: 16px 22px 14px; margin-bottom: 8px;
 }
-.rv-upload-title { font-size: 22px; font-weight: 700; color: #FFFFFF; margin-bottom: 8px; }
-.rv-upload-sub { font-size: 13px; color: #4A7090; }
+.rv-upload-title { font-size: 16px; font-weight: 700; color: #FFFFFF; margin-bottom: 4px; }
+.rv-upload-sub { font-size: 12px; color: #4A7090; }
 .rv-steps { display: flex; gap: 10px; margin-top: 0; }
 .rv-step { flex: 1; background: #0F2133; border: 1px solid #1A3250; border-radius: 10px; padding: 18px 20px; }
 .rv-step-num { font-size: 10px; font-weight: 700; color: #1DC9A4; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 6px; }
@@ -1631,17 +1631,14 @@ with right_col:
                   sel_flags,sel_tax,sel_repl,sel_rentcomps,sel_addinc2,sel_salecomps,
                   sel_addinc,sel_utilities,sel_pop,sel_afford,sel_schools,sel_employers,sel_market])
 
-    # Buttons at the bottom
+    # Buttons at the bottom — stacked vertically
     st.markdown(f'<div class="rvdiv"></div><div class="rvcnt">{_n_sel} / 18 selected</div>', unsafe_allow_html=True)
-    _b1, _b2 = st.columns(2)
-    with _b1:
-        if st.button("✓ Select All", key="btn_sel", use_container_width=True):
-            for k in _keys: st.session_state["sel_"+k] = True
-            st.rerun()
-    with _b2:
-        if st.button("✕ Deselect All", key="btn_des", use_container_width=True):
-            for k in _keys: st.session_state["sel_"+k] = False
-            st.rerun()
+    if st.button("✓  Select All", key="btn_sel", use_container_width=True):
+        for k in _keys: st.session_state["sel_"+k] = True
+        st.rerun()
+    if st.button("✕  Deselect All", key="btn_des", use_container_width=True):
+        for k in _keys: st.session_state["sel_"+k] = False
+        st.rerun()
 
     st.markdown(f"""
 <div class="rvdiv"></div>
@@ -1655,7 +1652,7 @@ with right_col:
 
 with main_col:
     st.markdown("""
-<div style="padding: 36px 44px 0;">
+<div style="padding: 20px 44px 0;">
   <div class="rv-section-label-wrap">
     <span class="rv-section-label">Upload Offering Memorandum</span>
     <div class="rv-section-label-line"></div>
