@@ -141,6 +141,7 @@ section[data-testid="stSidebar"] { display: none !important; }
 .rvph  { font-size:10px; font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:#1DC9A4; margin:14px 0 8px; display:block; }
 .rvph2 { font-size:10px; font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:#1DC9A4; margin:10px 0 6px; display:block; }
 .rvdiv { border:none; border-top:1px solid #152030; margin:10px 0 6px; }
+.rvcnt { font-size:11px; color:#3A6080; text-align:center; margin:4px 0 2px; }
 .rvmeta { font-size:10px; color:#2A4860; margin-top:4px; }
 .rvmeta span { color:#4A7090; }
 .rvbrok { font-size:10px; color:#2A4860; line-height:1.8; margin-top:4px; }
@@ -1603,7 +1604,9 @@ with right_col:
         if "sel_"+k not in st.session_state:
             st.session_state["sel_"+k] = True
 
-    # Select All / Deselect All buttons
+    st.markdown('<div class="rvph" style="margin-top:0;">What\'s in the Report</div>', unsafe_allow_html=True)
+
+    # Select All / Deselect All at the top — always visible
     _b1, _b2 = st.columns(2)
     with _b1:
         if st.button("✓ Select All", key="btn_sel", use_container_width=True):
@@ -1614,8 +1617,9 @@ with right_col:
             for k in _keys: st.session_state["sel_"+k] = False
             st.rerun()
 
-    st.markdown('<div class="rvdiv"></div><div class="rvph">What\'s in the Report</div>', unsafe_allow_html=True)
-    st.markdown('<div class="rvph2">Tab 1 — Financials</div>', unsafe_allow_html=True)
+    _n_sel_pre = sum([st.session_state.get("sel_"+k, True) for k in _keys])
+    st.markdown(f'<div class="rvcnt">{_n_sel_pre} / 18 selected</div>', unsafe_allow_html=True)
+    st.markdown('<div class="rvdiv"></div><div class="rvph2">Tab 1 — Financials</div>', unsafe_allow_html=True)
     sel_deal      = st.checkbox("Deal summary & property details",          value=st.session_state["sel_deal"],      key="sel_deal")
     sel_unitmix   = st.checkbox("Unit mix with rent upside",                value=st.session_state["sel_unitmix"],   key="sel_unitmix")
     sel_opstat    = st.checkbox("Operating statement (all periods)",        value=st.session_state["sel_opstat"],    key="sel_opstat")
@@ -1649,7 +1653,6 @@ with right_col:
 <div class="rvmeta">Processing time: <span>30–90 sec</span></div>
 <div class="rvmeta">Max file size: <span>50 MB</span></div>
 <div class="rvmeta">Output: <span>3-tab Excel (.xlsx)</span></div>
-<div class="rvmeta" style="margin-top:6px;"><span style="color:#1DC9A4;font-weight:700;">{_n_sel} / 18</span> <span>sections selected</span></div>
 """, unsafe_allow_html=True)
 
 with main_col:
