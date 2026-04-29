@@ -1423,6 +1423,75 @@ def build_excel(d: dict, filename: str) -> bytes:
         r = _kv(ws3, r, k, v, alt=bool(i % 2), n=6)
     r = _sp(ws3, r)
 
+    # ── G. Major Employers ────────────────────────────────────────────────────
+    employers = demo.get("employers") or []
+    r = _sec(ws3, r, "G.  MAJOR EMPLOYERS & ECONOMIC DRIVERS", n=6)
+    if employers and any(e.get("name") for e in employers):
+        r = _thdr(ws3, r, ["Employer / Institution","Drive Time","Employees","Sector","Notes"], n=6)
+        for i, e in enumerate(employers):
+            if e.get("name"):
+                r = _drow(ws3, r, [
+                    e.get("name","—"), e.get("drive") or "—", e.get("employees") or "—",
+                    e.get("sector") or "—", e.get("notes") or "—",
+                ], alt=bool(i % 2), als=["left","center","center","left","left"], h=22, n=6)
+    else:
+        r = _kv(ws3, r, "Note", "No employer data found in OM — source from CoStar or broker.", n=6)
+    r = _sp(ws3, r)
+
+    # ── H. Market & Submarket Overview ────────────────────────────────────────
+    r = _sec(ws3, r, "H.  MARKET & SUBMARKET OVERVIEW", n=6)
+    if mkt.get("market_summary"):
+        r = _shdr(ws3, r, "Market Narrative", n=6)
+        _fr(ws3, r, 6, C_WHITE)
+        _sc(ws3, r, 1, mkt["market_summary"], bg=C_WHITE, fg=C_BODY, size=9, wrap=True)
+        ws3.row_dimensions[r].height = 45; r += 1; r = _sp(ws3, r)
+
+    r = _shdr(ws3, r, "Submarket Metrics", n=6)
+    for i, (k, v) in enumerate([
+        ("Submarket",         mkt.get("submarket")),
+        ("Sub. Occupancy",    mkt.get("sub_occupancy")),
+        ("Sub. Avg Rent",     _v(mkt.get("sub_rent"), "$")),
+        ("Sub. Rent Growth",  mkt.get("sub_growth")),
+        ("Metro Inventory",   mkt.get("metro_inventory")),
+        ("Metro Occupancy",   mkt.get("metro_occupancy")),
+    ]):
+        if v: r = _kv(ws3, r, k, v, alt=bool(i % 2), n=6)
+
+    # ── I. Supply & Demand ────────────────────────────────────────────────────
+    r = _sp(ws3, r)
+    r = _sec(ws3, r, "I.  SUPPLY & DEMAND", n=6)
+    r = _thdr(ws3, r, ["Metric","Value","Notes"], n=6)
+    supply_rows = [
+        ("Pipeline Units (Under Construction)", _v(mkt.get("pipeline"), "n"),    "Units currently under construction in submarket"),
+        ("Absorption (Units / Year)",           _v(mkt.get("absorption"), "n"),   "Annual net absorption in submarket"),
+        ("Investment Volume",                   mkt.get("investment_vol") or "—", "Total multifamily investment volume"),
+    ]
+    for i, (k, v, note) in enumerate(supply_rows):
+        if v and v != "N/A":
+            bg = C_ALT if bool(i % 2) else C_WHITE
+            _fr(ws3, r, 6, bg)
+            _sc(ws3, r, 1, k,    bold=True, fg=C_LABEL,   bg=bg, size=9)
+            _sc(ws3, r, 2, v,    fg=C_BLUE_IN, bg=bg, size=9, ha="right")
+            _sc(ws3, r, 3, note, fg=C_BODY,    bg=bg, size=9, wrap=True)
+            ws3.cell(row=r, column=4).fill = PatternFill("solid", fgColor=bg)
+            ws3.cell(row=r, column=5).fill = PatternFill("solid", fgColor=bg)
+            ws3.cell(row=r, column=6).fill = PatternFill("solid", fgColor=bg)
+            ws3.row_dimensions[r].height = 16; r += 1
+
+    devs = mkt.get("major_developments") or []
+    if devs and any(d.get("name") for d in devs):
+        r = _sp(ws3, r)
+        r = _shdr(ws3, r, "Pipeline Developments", n=6)
+        r = _thdr(ws3, r, ["Development","Description","Est. Cost","Jobs","Timeline"], n=6)
+        for i, dev in enumerate(devs):
+            if dev.get("name"):
+                r = _drow(ws3, r, [
+                    dev.get("name","—"), dev.get("description") or "—",
+                    dev.get("cost") or "—", dev.get("jobs") or "—",
+                    dev.get("timeline") or "—",
+                ], alt=bool(i % 2), als=["left","left","right","center","left"], h=25, n=6)
+    r = _sp(ws3, r)
+
     # Disclaimer
     _fr(ws3, r, 6, C_ALT)
     _sc(ws3, r, 1, "AI-generated. Internal use only. Verify all figures independently. Powered by Anthropic Claude.",
@@ -1485,6 +1554,9 @@ with right_col:
   <div class="rv-bullet"><div class="rv-bullet-dot"></div><div class="rv-bullet-txt">Schools, crime &amp; quality of life</div></div>
   <div class="rv-bullet"><div class="rv-bullet-dot"></div><div class="rv-bullet-txt">Additional income</div></div>
   <div class="rv-bullet"><div class="rv-bullet-dot"></div><div class="rv-bullet-txt">Utilities &amp; site information</div></div>
+  <div class="rv-bullet"><div class="rv-bullet-dot"></div><div class="rv-bullet-txt">Major employers &amp; economic drivers</div></div>
+  <div class="rv-bullet"><div class="rv-bullet-dot"></div><div class="rv-bullet-txt">Market &amp; submarket overview</div></div>
+  <div class="rv-bullet"><div class="rv-bullet-dot"></div><div class="rv-bullet-txt">Supply &amp; demand / pipeline</div></div>
   <hr class="rv-divider">
   <div class="rv-panel-heading">Supported Brokers</div>
   <div class="rv-brokers">JLL · CBRE · Marcus &amp; Millichap · Cushman &amp; Wakefield · Newmark · Colliers · Berkadia · Walker &amp; Dunlop · Northmarq</div>
