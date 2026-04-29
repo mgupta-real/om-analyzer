@@ -111,6 +111,7 @@ section[data-testid="stSidebar"] { display: none !important; }
 [data-testid="stCheckbox"] label {
     gap: 8px !important;
     align-items: flex-start !important;
+    background: transparent !important;
 }
 [data-testid="stCheckbox"] label p,
 [data-testid="stCheckbox"] label span:not([data-testid]) {
