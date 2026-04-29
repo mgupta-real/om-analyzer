@@ -1582,52 +1582,160 @@ st.markdown("""
 main_col, right_col = st.columns([2.2, 1], gap="small")
 
 with right_col:
-    st.markdown("""
-<div class="rv-right-panel">
-  <div class="rv-panel-heading">What's in the Report</div>
-""", unsafe_allow_html=True)
+    # Use session_state to persist checkbox values across reruns
+    _keys = ["deal","unitmix","opstat","valueadd","financing","flags","tax","repl",
+             "rentcomps","addinc2","salecomps","addinc","utilities","pop","afford",
+             "schools","employers","market"]
+    for k in _keys:
+        if f"sel_{k}" not in st.session_state:
+            st.session_state[f"sel_{k}"] = True
 
-    # ── Section checkboxes ────────────────────────────────────────────────────
-    st.markdown('<div class="rv-panel-heading" style="margin-top:14px;">Tab 1 — Financials</div>', unsafe_allow_html=True)
-    sel_deal       = st.checkbox("Deal summary & property details",         value=True, key="sel_deal")
-    sel_unitmix    = st.checkbox("Unit mix with rent upside",               value=True, key="sel_unitmix")
-    sel_opstat     = st.checkbox("Operating statement (all periods)",       value=True, key="sel_opstat")
-    sel_valueadd   = st.checkbox("Value-add by floor plan & revenue levers",value=True, key="sel_valueadd")
-    sel_financing  = st.checkbox("Financing & debt terms (incl. IO period)",value=True, key="sel_financing")
-    sel_flags      = st.checkbox("Underwriting flags",                      value=True, key="sel_flags")
-    sel_tax        = st.checkbox("Property tax & abatement",                value=True, key="sel_tax")
-    sel_repl       = st.checkbox("Replacement cost, insurance & management",value=True, key="sel_repl")
+    # Hidden Streamlit checkboxes (invisible, just for state)
+    sel_deal      = st.checkbox("deal",      value=st.session_state["sel_deal"],      key="sel_deal",      label_visibility="collapsed")
+    sel_unitmix   = st.checkbox("unitmix",   value=st.session_state["sel_unitmix"],   key="sel_unitmix",   label_visibility="collapsed")
+    sel_opstat    = st.checkbox("opstat",    value=st.session_state["sel_opstat"],     key="sel_opstat",    label_visibility="collapsed")
+    sel_valueadd  = st.checkbox("valueadd",  value=st.session_state["sel_valueadd"],  key="sel_valueadd",  label_visibility="collapsed")
+    sel_financing = st.checkbox("financing", value=st.session_state["sel_financing"], key="sel_financing", label_visibility="collapsed")
+    sel_flags     = st.checkbox("flags",     value=st.session_state["sel_flags"],     key="sel_flags",     label_visibility="collapsed")
+    sel_tax       = st.checkbox("tax",       value=st.session_state["sel_tax"],       key="sel_tax",       label_visibility="collapsed")
+    sel_repl      = st.checkbox("repl",      value=st.session_state["sel_repl"],      key="sel_repl",      label_visibility="collapsed")
+    sel_rentcomps = st.checkbox("rentcomps", value=st.session_state["sel_rentcomps"], key="sel_rentcomps", label_visibility="collapsed")
+    sel_addinc2   = st.checkbox("addinc2",   value=st.session_state["sel_addinc2"],   key="sel_addinc2",   label_visibility="collapsed")
+    sel_salecomps = st.checkbox("salecomps", value=st.session_state["sel_salecomps"], key="sel_salecomps", label_visibility="collapsed")
+    sel_addinc    = st.checkbox("addinc",    value=st.session_state["sel_addinc"],    key="sel_addinc",    label_visibility="collapsed")
+    sel_utilities = st.checkbox("utilities", value=st.session_state["sel_utilities"], key="sel_utilities", label_visibility="collapsed")
+    sel_pop       = st.checkbox("pop",       value=st.session_state["sel_pop"],       key="sel_pop",       label_visibility="collapsed")
+    sel_afford    = st.checkbox("afford",    value=st.session_state["sel_afford"],    key="sel_afford",    label_visibility="collapsed")
+    sel_schools   = st.checkbox("schools",   value=st.session_state["sel_schools"],   key="sel_schools",   label_visibility="collapsed")
+    sel_employers = st.checkbox("employers", value=st.session_state["sel_employers"], key="sel_employers", label_visibility="collapsed")
+    sel_market    = st.checkbox("market",    value=st.session_state["sel_market"],    key="sel_market",    label_visibility="collapsed")
 
-    st.markdown('<hr class="rv-divider"><div class="rv-panel-heading">Tab 2 — Comparables</div>', unsafe_allow_html=True)
-    sel_rentcomps  = st.checkbox("Garden & townhouse rent comps",           value=True, key="sel_rentcomps")
-    sel_addinc2    = st.checkbox("Additional income opportunities",         value=True, key="sel_addinc2")
-    sel_salecomps  = st.checkbox("Sale comparables with buyer/seller",      value=True, key="sel_salecomps")
+    _vals = {"deal":sel_deal,"unitmix":sel_unitmix,"opstat":sel_opstat,
+             "valueadd":sel_valueadd,"financing":sel_financing,"flags":sel_flags,
+             "tax":sel_tax,"repl":sel_repl,"rentcomps":sel_rentcomps,
+             "addinc2":sel_addinc2,"salecomps":sel_salecomps,"addinc":sel_addinc,
+             "utilities":sel_utilities,"pop":sel_pop,"afford":sel_afford,
+             "schools":sel_schools,"employers":sel_employers,"market":sel_market}
+    _n_sel = sum(_vals.values())
 
-    st.markdown('<hr class="rv-divider"><div class="rv-panel-heading">Tab 3 — Demographics</div>', unsafe_allow_html=True)
-    sel_addinc     = st.checkbox("Additional income",                       value=True, key="sel_addinc")
-    sel_utilities  = st.checkbox("Utilities & site information",            value=True, key="sel_utilities")
-    sel_pop        = st.checkbox("Population & income (1-mi / 3-mi / 5-mi)",value=True, key="sel_pop")
-    sel_afford     = st.checkbox("Affordability analysis",                  value=True, key="sel_afford")
-    sel_schools    = st.checkbox("Schools, crime & quality of life",        value=True, key="sel_schools")
-    sel_employers  = st.checkbox("Major employers & economic drivers",      value=True, key="sel_employers")
-    sel_market     = st.checkbox("Market, submarket & supply/demand",       value=True, key="sel_market")
-
-    # Count selected
-    _all_sels = [sel_deal,sel_unitmix,sel_opstat,sel_valueadd,sel_financing,
-                 sel_flags,sel_tax,sel_repl,sel_rentcomps,sel_addinc2,sel_salecomps,
-                 sel_addinc,sel_utilities,sel_pop,sel_afford,sel_schools,sel_employers,sel_market]
-    _n_sel = sum(_all_sels)
+    # Build checked state string for JS
+    _checked_js = "{" + ",".join(f'"{k}":{"true" if v else "false"}' for k,v in _vals.items()) + "}"
 
     st.markdown(f"""
-<hr class="rv-divider">
-<div class="rv-panel-heading">Supported Brokers</div>
-<div class="rv-brokers">JLL · CBRE · Marcus &amp; Millichap · Cushman &amp; Wakefield · Newmark · Colliers · Berkadia · Walker &amp; Dunlop · Northmarq</div>
-<hr class="rv-divider">
-<div class="rv-meta">Processing time: <span>30–90 sec</span></div>
-<div class="rv-meta">Max file size: <span>50 MB</span></div>
-<div class="rv-meta">Output: <span>3-tab Excel (.xlsx)</span></div>
-<div class="rv-meta" style="margin-top:10px;font-size:12px;">Selected: <span>{_n_sel} / 19 sections</span></div>
+<style>
+/* Hide the collapsed Streamlit checkboxes */
+[data-testid="stCheckbox"] {{ display: none !important; }}
+/* Custom checkbox styles inside panel */
+.rv-cb-row {{ display:flex; align-items:flex-start; gap:10px; margin-bottom:9px; cursor:pointer; }}
+.rv-cb-row:hover .rv-cb-txt {{ color:#8ABDD0 !important; }}
+.rv-cb {{
+  width:15px; height:15px; border:1.5px solid #2A5070; border-radius:3px;
+  background:#0B1E30; flex-shrink:0; margin-top:2px; display:flex;
+  align-items:center; justify-content:center; transition:.15s;
+}}
+.rv-cb.checked {{ background:#1DC9A4; border-color:#1DC9A4; }}
+.rv-cb.checked::after {{
+  content:''; display:block; width:4px; height:7px;
+  border:2px solid #0D1B2A; border-top:none; border-left:none;
+  transform:rotate(45deg) translate(1px,-1px);
+}}
+.rv-cb-txt {{ font-size:13px; color:#5A8FAA; line-height:1.4; user-select:none; }}
+.rv-sel-btn {{
+  background:transparent; border:1px solid #1A3250; color:#1DC9A4;
+  border-radius:6px; padding:5px 12px; font-size:11px; font-weight:600;
+  cursor:pointer; width:100%; margin-top:10px; letter-spacing:.04em;
+}}
+.rv-sel-btn:hover {{ background:#1DC9A420; }}
+.rv-sel-count {{ font-size:11px; color:#3A6080; margin-top:6px; text-align:center; }}
+</style>
+
+<div class="rv-right-panel">
+  <div class="rv-panel-heading">What's in the Report</div>
+
+  <div class="rv-panel-heading" style="margin-top:14px;">Tab 1 — Financials</div>
+  <div class="rv-cb-row" onclick="toggle('deal')"><div class="rv-cb {'checked' if sel_deal else ''}" id="cb_deal"></div><div class="rv-cb-txt">Deal summary &amp; property details</div></div>
+  <div class="rv-cb-row" onclick="toggle('unitmix')"><div class="rv-cb {'checked' if sel_unitmix else ''}" id="cb_unitmix"></div><div class="rv-cb-txt">Unit mix with rent upside</div></div>
+  <div class="rv-cb-row" onclick="toggle('opstat')"><div class="rv-cb {'checked' if sel_opstat else ''}" id="cb_opstat"></div><div class="rv-cb-txt">Operating statement (all periods)</div></div>
+  <div class="rv-cb-row" onclick="toggle('valueadd')"><div class="rv-cb {'checked' if sel_valueadd else ''}" id="cb_valueadd"></div><div class="rv-cb-txt">Value-add by floor plan &amp; revenue levers</div></div>
+  <div class="rv-cb-row" onclick="toggle('financing')"><div class="rv-cb {'checked' if sel_financing else ''}" id="cb_financing"></div><div class="rv-cb-txt">Financing &amp; debt terms (incl. IO period)</div></div>
+  <div class="rv-cb-row" onclick="toggle('flags')"><div class="rv-cb {'checked' if sel_flags else ''}" id="cb_flags"></div><div class="rv-cb-txt">Underwriting flags</div></div>
+  <div class="rv-cb-row" onclick="toggle('tax')"><div class="rv-cb {'checked' if sel_tax else ''}" id="cb_tax"></div><div class="rv-cb-txt">Property tax &amp; abatement</div></div>
+  <div class="rv-cb-row" onclick="toggle('repl')"><div class="rv-cb {'checked' if sel_repl else ''}" id="cb_repl"></div><div class="rv-cb-txt">Replacement cost, insurance &amp; management</div></div>
+
+  <hr class="rv-divider">
+  <div class="rv-panel-heading">Tab 2 — Comparables</div>
+  <div class="rv-cb-row" onclick="toggle('rentcomps')"><div class="rv-cb {'checked' if sel_rentcomps else ''}" id="cb_rentcomps"></div><div class="rv-cb-txt">Garden &amp; townhouse rent comps</div></div>
+  <div class="rv-cb-row" onclick="toggle('addinc2')"><div class="rv-cb {'checked' if sel_addinc2 else ''}" id="cb_addinc2"></div><div class="rv-cb-txt">Additional income opportunities</div></div>
+  <div class="rv-cb-row" onclick="toggle('salecomps')"><div class="rv-cb {'checked' if sel_salecomps else ''}" id="cb_salecomps"></div><div class="rv-cb-txt">Sale comparables with buyer/seller</div></div>
+
+  <hr class="rv-divider">
+  <div class="rv-panel-heading">Tab 3 — Demographics</div>
+  <div class="rv-cb-row" onclick="toggle('addinc')"><div class="rv-cb {'checked' if sel_addinc else ''}" id="cb_addinc"></div><div class="rv-cb-txt">Additional income</div></div>
+  <div class="rv-cb-row" onclick="toggle('utilities')"><div class="rv-cb {'checked' if sel_utilities else ''}" id="cb_utilities"></div><div class="rv-cb-txt">Utilities &amp; site information</div></div>
+  <div class="rv-cb-row" onclick="toggle('pop')"><div class="rv-cb {'checked' if sel_pop else ''}" id="cb_pop"></div><div class="rv-cb-txt">Population &amp; income (1-mi / 3-mi / 5-mi)</div></div>
+  <div class="rv-cb-row" onclick="toggle('afford')"><div class="rv-cb {'checked' if sel_afford else ''}" id="cb_afford"></div><div class="rv-cb-txt">Affordability analysis</div></div>
+  <div class="rv-cb-row" onclick="toggle('schools')"><div class="rv-cb {'checked' if sel_schools else ''}" id="cb_schools"></div><div class="rv-cb-txt">Schools, crime &amp; quality of life</div></div>
+  <div class="rv-cb-row" onclick="toggle('employers')"><div class="rv-cb {'checked' if sel_employers else ''}" id="cb_employers"></div><div class="rv-cb-txt">Major employers &amp; economic drivers</div></div>
+  <div class="rv-cb-row" onclick="toggle('market')"><div class="rv-cb {'checked' if sel_market else ''}" id="cb_market"></div><div class="rv-cb-txt">Market, submarket &amp; supply/demand</div></div>
+
+  <button class="rv-sel-btn" onclick="toggleAll()" id="selAllBtn">Deselect All</button>
+  <div class="rv-sel-count" id="selCount">{_n_sel} / 18 sections selected</div>
+
+  <hr class="rv-divider">
+  <div class="rv-panel-heading">Supported Brokers</div>
+  <div class="rv-brokers">JLL · CBRE · Marcus &amp; Millichap · Cushman &amp; Wakefield · Newmark · Colliers · Berkadia · Walker &amp; Dunlop · Northmarq</div>
+  <hr class="rv-divider">
+  <div class="rv-meta">Processing time: <span>30–90 sec</span></div>
+  <div class="rv-meta">Max file size: <span>50 MB</span></div>
+  <div class="rv-meta">Output: <span>3-tab Excel (.xlsx)</span></div>
 </div>
+
+<script>
+const KEYS = ["deal","unitmix","opstat","valueadd","financing","flags","tax","repl",
+              "rentcomps","addinc2","salecomps","addinc","utilities","pop","afford",
+              "schools","employers","market"];
+let state = {_checked_js};
+let allOn = {str(_n_sel == 18).lower()};
+
+function getStCheckbox(key) {{
+  const labels = parent.document.querySelectorAll('[data-testid="stCheckbox"] label');
+  for (const label of labels) {{
+    const p = label.querySelector('p');
+    if (p && p.textContent.trim() === key) return label.previousElementSibling || label.querySelector('input');
+  }}
+  const inputs = parent.document.querySelectorAll('[data-testid="stCheckbox"] input[type="checkbox"]');
+  const idx = KEYS.indexOf(key);
+  return idx >= 0 ? inputs[idx] : null;
+}}
+
+function toggle(key) {{
+  state[key] = !state[key];
+  const cb = document.getElementById('cb_' + key);
+  if (cb) state[key] ? cb.classList.add('checked') : cb.classList.remove('checked');
+  // Click the hidden Streamlit checkbox to sync state
+  const stCb = getStCheckbox(key);
+  if (stCb) stCb.click();
+  updateCount();
+}}
+
+function toggleAll() {{
+  allOn = !allOn;
+  KEYS.forEach(k => {{
+    const cur = state[k];
+    if (cur !== allOn) toggle(k);
+  }});
+  document.getElementById('selAllBtn').textContent = allOn ? 'Deselect All' : 'Select All';
+}}
+
+function updateCount() {{
+  const n = KEYS.filter(k => state[k]).length;
+  document.getElementById('selCount').textContent = n + ' / 18 sections selected';
+  allOn = n === KEYS.length;
+  document.getElementById('selAllBtn').textContent = allOn ? 'Deselect All' : 'Select All';
+}}
+
+updateCount();
+</script>
 """, unsafe_allow_html=True)
 
 with main_col:
