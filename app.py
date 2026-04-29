@@ -1600,44 +1600,58 @@ with right_col:
     _keys = ["deal","unitmix","opstat","valueadd","financing","flags","tax","repl",
              "rentcomps","addinc2","salecomps","addinc","utilities","pop","afford",
              "schools","employers","market"]
+
+    # Internal state keys (prefixed _v_) are separate from checkbox widget keys
+    # This avoids the StreamlitAPIException when setting widget-bound keys
     for k in _keys:
-        if "sel_"+k not in st.session_state:
-            st.session_state["sel_"+k] = True
+        if "_v_"+k not in st.session_state:
+            st.session_state["_v_"+k] = True
+
+    # Process Select All / Deselect All flags before rendering checkboxes
+    if st.session_state.pop("_do_selall", False):
+        for k in _keys: st.session_state["_v_"+k] = True
+    if st.session_state.pop("_do_desall", False):
+        for k in _keys: st.session_state["_v_"+k] = False
 
     st.markdown('<div class="rvph" style="margin-top:0;">What\'s in the Report</div>', unsafe_allow_html=True)
     st.markdown('<div class="rvph2">Tab 1 — Financials</div>', unsafe_allow_html=True)
-    sel_deal      = st.checkbox("Deal summary & property details",          value=st.session_state["sel_deal"],      key="sel_deal")
-    sel_unitmix   = st.checkbox("Unit mix with rent upside",                value=st.session_state["sel_unitmix"],   key="sel_unitmix")
-    sel_opstat    = st.checkbox("Operating statement (all periods)",        value=st.session_state["sel_opstat"],    key="sel_opstat")
-    sel_valueadd  = st.checkbox("Value-add by floor plan & revenue levers", value=st.session_state["sel_valueadd"], key="sel_valueadd")
-    sel_financing = st.checkbox("Financing & debt terms (incl. IO period)", value=st.session_state["sel_financing"],key="sel_financing")
-    sel_flags     = st.checkbox("Underwriting flags",                       value=st.session_state["sel_flags"],     key="sel_flags")
-    sel_tax       = st.checkbox("Property tax & abatement",                 value=st.session_state["sel_tax"],       key="sel_tax")
-    sel_repl      = st.checkbox("Replacement cost, insurance & management", value=st.session_state["sel_repl"],      key="sel_repl")
+    sel_deal      = st.checkbox("Deal summary & property details",          value=st.session_state["_v_deal"],      key="sel_deal")
+    sel_unitmix   = st.checkbox("Unit mix with rent upside",                value=st.session_state["_v_unitmix"],   key="sel_unitmix")
+    sel_opstat    = st.checkbox("Operating statement (all periods)",        value=st.session_state["_v_opstat"],    key="sel_opstat")
+    sel_valueadd  = st.checkbox("Value-add by floor plan & revenue levers", value=st.session_state["_v_valueadd"], key="sel_valueadd")
+    sel_financing = st.checkbox("Financing & debt terms (incl. IO period)", value=st.session_state["_v_financing"],key="sel_financing")
+    sel_flags     = st.checkbox("Underwriting flags",                       value=st.session_state["_v_flags"],    key="sel_flags")
+    sel_tax       = st.checkbox("Property tax & abatement",                 value=st.session_state["_v_tax"],      key="sel_tax")
+    sel_repl      = st.checkbox("Replacement cost, insurance & management", value=st.session_state["_v_repl"],     key="sel_repl")
     st.markdown('<div class="rvdiv"></div><div class="rvph2">Tab 2 — Comparables</div>', unsafe_allow_html=True)
-    sel_rentcomps = st.checkbox("Garden & townhouse rent comps",            value=st.session_state["sel_rentcomps"], key="sel_rentcomps")
-    sel_addinc2   = st.checkbox("Additional income opportunities",          value=st.session_state["sel_addinc2"],   key="sel_addinc2")
-    sel_salecomps = st.checkbox("Sale comparables with buyer/seller",       value=st.session_state["sel_salecomps"], key="sel_salecomps")
+    sel_rentcomps = st.checkbox("Garden & townhouse rent comps",            value=st.session_state["_v_rentcomps"],key="sel_rentcomps")
+    sel_addinc2   = st.checkbox("Additional income opportunities",          value=st.session_state["_v_addinc2"],  key="sel_addinc2")
+    sel_salecomps = st.checkbox("Sale comparables with buyer/seller",       value=st.session_state["_v_salecomps"],key="sel_salecomps")
     st.markdown('<div class="rvdiv"></div><div class="rvph2">Tab 3 — Demographics</div>', unsafe_allow_html=True)
-    sel_addinc    = st.checkbox("Additional income",                        value=st.session_state["sel_addinc"],    key="sel_addinc")
-    sel_utilities = st.checkbox("Utilities & site information",             value=st.session_state["sel_utilities"], key="sel_utilities")
-    sel_pop       = st.checkbox("Population & income (1-mi / 3-mi / 5-mi)",value=st.session_state["sel_pop"],       key="sel_pop")
-    sel_afford    = st.checkbox("Affordability analysis",                   value=st.session_state["sel_afford"],    key="sel_afford")
-    sel_schools   = st.checkbox("Schools, crime & quality of life",         value=st.session_state["sel_schools"],   key="sel_schools")
-    sel_employers = st.checkbox("Major employers & economic drivers",       value=st.session_state["sel_employers"], key="sel_employers")
-    sel_market    = st.checkbox("Market, submarket & supply/demand",        value=st.session_state["sel_market"],    key="sel_market")
+    sel_addinc    = st.checkbox("Additional income",                        value=st.session_state["_v_addinc"],   key="sel_addinc")
+    sel_utilities = st.checkbox("Utilities & site information",             value=st.session_state["_v_utilities"],key="sel_utilities")
+    sel_pop       = st.checkbox("Population & income (1-mi / 3-mi / 5-mi)",value=st.session_state["_v_pop"],      key="sel_pop")
+    sel_afford    = st.checkbox("Affordability analysis",                   value=st.session_state["_v_afford"],   key="sel_afford")
+    sel_schools   = st.checkbox("Schools, crime & quality of life",         value=st.session_state["_v_schools"],  key="sel_schools")
+    sel_employers = st.checkbox("Major employers & economic drivers",       value=st.session_state["_v_employers"],key="sel_employers")
+    sel_market    = st.checkbox("Market, submarket & supply/demand",        value=st.session_state["_v_market"],   key="sel_market")
 
-    _n_sel = sum([sel_deal,sel_unitmix,sel_opstat,sel_valueadd,sel_financing,
-                  sel_flags,sel_tax,sel_repl,sel_rentcomps,sel_addinc2,sel_salecomps,
-                  sel_addinc,sel_utilities,sel_pop,sel_afford,sel_schools,sel_employers,sel_market])
+    # Sync checkbox values back to internal state so next rerun picks them up
+    _vals = [sel_deal,sel_unitmix,sel_opstat,sel_valueadd,sel_financing,sel_flags,
+             sel_tax,sel_repl,sel_rentcomps,sel_addinc2,sel_salecomps,sel_addinc,
+             sel_utilities,sel_pop,sel_afford,sel_schools,sel_employers,sel_market]
+    for k, v in zip(_keys, _vals):
+        st.session_state["_v_"+k] = v
 
-    # Buttons at the bottom — stacked vertically
+    _n_sel = sum(_vals)
+
+    # Buttons at the bottom — stacked vertically, set flags only (no widget key conflict)
     st.markdown(f'<div class="rvdiv"></div><div class="rvcnt">{_n_sel} / 18 selected</div>', unsafe_allow_html=True)
     if st.button("✓  Select All", key="btn_sel", use_container_width=True):
-        for k in _keys: st.session_state["sel_"+k] = True
+        st.session_state["_do_selall"] = True
         st.rerun()
     if st.button("✕  Deselect All", key="btn_des", use_container_width=True):
-        for k in _keys: st.session_state["sel_"+k] = False
+        st.session_state["_do_desall"] = True
         st.rerun()
 
     st.markdown(f"""
