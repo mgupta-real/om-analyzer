@@ -46,7 +46,7 @@ section[data-testid="stSidebar"] { display: none !important; }
 .rv-right-panel {
     width: 380px; flex-shrink: 0; background: #091420;
     border-left: 1px solid #1A2E42; padding: 36px 28px;
-    margin-right: -9rem;
+    margin-right: -5rem;
     min-height: 100vh;
 }
 .rv-panel-heading {
@@ -296,14 +296,15 @@ SCHEMA:
     "rent_headroom": null, "units_compliant": null, "pct_compliant": null
   },
   "demographics": {
-    "pop_3mi": null, "pop_5mi": null, "pop_growth_3mi": null, "pop_growth_5mi": null,
-    "pop_2030_3mi": null, "pop_2030_5mi": null,
-    "median_income_3mi": null, "median_income_5mi": null,
-    "median_income_2030_3mi": null, "median_income_2030_5mi": null,
-    "income_growth_3mi": null, "income_growth_5mi": null,
-    "renter_pct_3mi": null, "renter_pct_5mi": null,
-    "college_pct_3mi": null, "college_pct_5mi": null,
-    "white_collar_pct_3mi": null, "white_collar_pct_5mi": null,
+    "pop_1mi": null, "pop_3mi": null, "pop_5mi": null,
+    "pop_growth_1mi": null, "pop_growth_3mi": null, "pop_growth_5mi": null,
+    "pop_2030_1mi": null, "pop_2030_3mi": null, "pop_2030_5mi": null,
+    "median_income_1mi": null, "median_income_3mi": null, "median_income_5mi": null,
+    "median_income_2030_1mi": null, "median_income_2030_3mi": null, "median_income_2030_5mi": null,
+    "income_growth_1mi": null, "income_growth_3mi": null, "income_growth_5mi": null,
+    "renter_pct_1mi": null, "renter_pct_3mi": null, "renter_pct_5mi": null,
+    "college_pct_1mi": null, "college_pct_3mi": null, "college_pct_5mi": null,
+    "white_collar_pct_1mi": null, "white_collar_pct_3mi": null, "white_collar_pct_5mi": null,
     "home_value": null, "home_value_area": null,
     "crime": null, "school_district": null, "elementary": null,
     "middle": null, "high_school": null,
@@ -410,7 +411,8 @@ SCHEMA:
 }
 
 CRITICAL EXTRACTION RULES:
-1. DEMOGRAPHICS: columns order is 3-mile, 5-mile, County, Metro. Extract both.
+1. DEMOGRAPHICS: columns order is 1-mile, 3-mile, 5-mile, County, Metro. Extract all three radii.
+   If 1-mile data is not present in the OM, leave 1-mile fields as null.
 2. FINANCIAL PERIODS: Extract ALL column headers exactly as they appear (e.g. "T12", "T6 Ann", "T3 Ann", "T1 Ann",
    "Pro Forma YR1", "Year 0", "YR1", "YR2", "FY1", "F-3 Proforma Income", "Current Rents Proforma",
    "2nd Generation Leases Proforma", "Year 2", "Year 3", etc.). Do NOT rename or standardize them.
@@ -478,7 +480,7 @@ CRITICAL EXTRACTION RULES:
     Also set per_unit = gross_replacement_per_unit and total = gross_replacement_total.
     If no breakdown exists, populate just per_unit, per_sf, total, source, notes.
 
-15. DEMOGRAPHICS: Extract 3-mile and 5-mile data separately. Never mix them.
+15. DEMOGRAPHICS: Extract 1-mile, 3-mile and 5-mile data separately. Never mix them.
     If demographic data is not in the OM, set all demographic fields to null.
 
 16. Extract every number that exists anywhere in the OM. Do not skip any table or data page.
@@ -1286,7 +1288,7 @@ def build_excel(d: dict, filename: str) -> bytes:
     # ══════════════════════════════════════════════════════════════════════════
     ws3 = wb.create_sheet("Demographics")
     ws3.sheet_view.showGridLines = False
-    for col, w in {"A":38,"B":24,"C":24,"D":16,"E":16,"F":42}.items():
+    for col, w in {"A":36,"B":20,"C":20,"D":20,"E":14,"F":42}.items():
         ws3.column_dimensions[col].width = w
 
     r = 1
@@ -1294,33 +1296,33 @@ def build_excel(d: dict, filename: str) -> bytes:
 
     # ── A. Population & Income ────────────────────────────────────────────────
     r = _sec(ws3, r, "A.  POPULATION & INCOME DEMOGRAPHICS", n=6)
-    has_demo = any(demo.get(k) for k in ["pop_3mi","pop_5mi","median_income_3mi"])
+    has_demo = any(demo.get(k) for k in ["pop_1mi","pop_3mi","pop_5mi","median_income_3mi"])
     if not has_demo:
         _fr(ws3, r, 6, C_WARN)
-        _sc(ws3, r, 1, "Detailed 3-mile / 5-mile radius demographic data not provided in this OM. Source independently from CoStar, Esri, or census.gov.",
+        _sc(ws3, r, 1, "Detailed 1-mile / 3-mile / 5-mile radius demographic data not provided in this OM. Source independently from CoStar, Esri, or census.gov.",
             bg=C_WARN, fg=C_LABEL, size=9, bold=True, wrap=True)
         ws3.row_dimensions[r].height = 30; r += 1; r = _sp(ws3, r)
 
-    r = _thdr(ws3, r, ["Metric","3-Mile Radius","5-Mile Radius","Notes"], n=6)
-    for i, (metric, v3, v5, note) in enumerate([
-        ("Population (2025)",        _v(demo.get("pop_3mi"),"n"),  _v(demo.get("pop_5mi"),"n"),  ""),
-        ("Population (2030 Proj.)",  _v(demo.get("pop_2030_3mi"),"n"), _v(demo.get("pop_2030_5mi"),"n"), ""),
-        ("Population Growth (5-yr)", demo.get("pop_growth_3mi") or "—", demo.get("pop_growth_5mi") or "—", ""),
-        ("Median HH Income (2025)",  _v(demo.get("median_income_3mi"),"$"), _v(demo.get("median_income_5mi"),"$"), ""),
-        ("Median HH Income (2030)",  _v(demo.get("median_income_2030_3mi"),"$"), _v(demo.get("median_income_2030_5mi"),"$"), ""),
-        ("Income Growth (5-yr)",     demo.get("income_growth_3mi") or "—", demo.get("income_growth_5mi") or "—", ""),
-        ("Renter-Occupied Units",    demo.get("renter_pct_3mi") or "—", demo.get("renter_pct_5mi") or "—", ""),
-        ("Bachelor's Degree+",       demo.get("college_pct_3mi") or "—", demo.get("college_pct_5mi") or "—", ""),
-        ("White-Collar Workers",     demo.get("white_collar_pct_3mi") or "—", demo.get("white_collar_pct_5mi") or "—", ""),
-        ("Avg Home Value",           _v(demo.get("home_value"),"$"), "—", ""),
+    r = _thdr(ws3, r, ["Metric","1-Mile Radius","3-Mile Radius","5-Mile Radius","Notes"], n=6)
+    for i, (metric, v1, v3, v5, note) in enumerate([
+        ("Population (2025)",        _v(demo.get("pop_1mi"),"n"),  _v(demo.get("pop_3mi"),"n"),  _v(demo.get("pop_5mi"),"n"),  ""),
+        ("Population (2030 Proj.)",  _v(demo.get("pop_2030_1mi"),"n"), _v(demo.get("pop_2030_3mi"),"n"), _v(demo.get("pop_2030_5mi"),"n"), ""),
+        ("Population Growth (5-yr)", demo.get("pop_growth_1mi") or "—", demo.get("pop_growth_3mi") or "—", demo.get("pop_growth_5mi") or "—", ""),
+        ("Median HH Income (2025)",  _v(demo.get("median_income_1mi"),"$"), _v(demo.get("median_income_3mi"),"$"), _v(demo.get("median_income_5mi"),"$"), ""),
+        ("Median HH Income (2030)",  _v(demo.get("median_income_2030_1mi"),"$"), _v(demo.get("median_income_2030_3mi"),"$"), _v(demo.get("median_income_2030_5mi"),"$"), ""),
+        ("Income Growth (5-yr)",     demo.get("income_growth_1mi") or "—", demo.get("income_growth_3mi") or "—", demo.get("income_growth_5mi") or "—", ""),
+        ("Renter-Occupied Units",    demo.get("renter_pct_1mi") or "—", demo.get("renter_pct_3mi") or "—", demo.get("renter_pct_5mi") or "—", ""),
+        ("Bachelor's Degree+",       demo.get("college_pct_1mi") or "—", demo.get("college_pct_3mi") or "—", demo.get("college_pct_5mi") or "—", ""),
+        ("White-Collar Workers",     demo.get("white_collar_pct_1mi") or "—", demo.get("white_collar_pct_3mi") or "—", demo.get("white_collar_pct_5mi") or "—", ""),
+        ("Avg Home Value",           "—", _v(demo.get("home_value"),"$"), "—", ""),
     ]):
         bg = C_ALT if bool(i % 2) else C_WHITE
         _fr(ws3, r, 6, bg)
         _sc(ws3, r, 1, metric, bold=True, fg=C_LABEL, bg=bg, size=9)
-        _sc(ws3, r, 2, v3, fg=C_BLUE_IN, bg=bg, size=9, ha="right")
-        _sc(ws3, r, 3, v5, fg=C_BLUE_IN, bg=bg, size=9, ha="right")
-        _sc(ws3, r, 4, note, fg=C_BODY, bg=bg, size=9, wrap=True)
-        ws3.cell(row=r, column=5).fill = PatternFill("solid", fgColor=bg)
+        _sc(ws3, r, 2, v1, fg=C_BLUE_IN, bg=bg, size=9, ha="right")
+        _sc(ws3, r, 3, v3, fg=C_BLUE_IN, bg=bg, size=9, ha="right")
+        _sc(ws3, r, 4, v5, fg=C_BLUE_IN, bg=bg, size=9, ha="right")
+        _sc(ws3, r, 5, note, fg=C_BODY, bg=bg, size=9, wrap=True)
         ws3.cell(row=r, column=6).fill = PatternFill("solid", fgColor=bg)
         ws3.row_dimensions[r].height = 16; r += 1
     r = _sp(ws3, r)
@@ -1478,7 +1480,7 @@ with right_col:
   <div class="rv-bullet"><div class="rv-bullet-dot"></div><div class="rv-bullet-txt">Sale comparables with buyer/seller</div></div>
   <hr class="rv-divider">
   <div class="rv-panel-heading">Tab 3 — Demographics</div>
-  <div class="rv-bullet"><div class="rv-bullet-dot"></div><div class="rv-bullet-txt">Population &amp; income (3-mi / 5-mi)</div></div>
+  <div class="rv-bullet"><div class="rv-bullet-dot"></div><div class="rv-bullet-txt">Population &amp; income (1-mi / 3-mi / 5-mi)</div></div>
   <div class="rv-bullet"><div class="rv-bullet-dot"></div><div class="rv-bullet-txt">Affordability analysis</div></div>
   <div class="rv-bullet"><div class="rv-bullet-dot"></div><div class="rv-bullet-txt">Schools, crime &amp; quality of life</div></div>
   <div class="rv-bullet"><div class="rv-bullet-dot"></div><div class="rv-bullet-txt">Additional income</div></div>
