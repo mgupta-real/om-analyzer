@@ -46,7 +46,7 @@ section[data-testid="stSidebar"] { display: none !important; }
 .rv-right-panel {
     width: 380px; flex-shrink: 0; background: #091420;
     border-left: 1px solid #1A2E42; padding: 36px 28px;
-    margin-right: -5rem;
+    margin-right: -9rem;
     min-height: 100vh;
 }
 .rv-panel-heading {
@@ -1465,12 +1465,12 @@ with right_col:
   <div class="rv-panel-heading" style="margin-top:14px;">Tab 1 — Financials</div>
   <div class="rv-bullet"><div class="rv-bullet-dot"></div><div class="rv-bullet-txt">Deal summary &amp; property details</div></div>
   <div class="rv-bullet"><div class="rv-bullet-dot"></div><div class="rv-bullet-txt">Unit mix with rent upside</div></div>
-  <div class="rv-bullet"><div class="rv-bullet-dot"></div><div class="rv-bullet-txt">Value-add by floor plan &amp; revenue levers</div></div>
   <div class="rv-bullet"><div class="rv-bullet-dot"></div><div class="rv-bullet-txt">Operating statement (all periods)</div></div>
-  <div class="rv-bullet"><div class="rv-bullet-dot"></div><div class="rv-bullet-txt">Property tax &amp; abatement</div></div>
-  <div class="rv-bullet"><div class="rv-bullet-dot"></div><div class="rv-bullet-txt">Replacement cost, insurance &amp; management</div></div>
+  <div class="rv-bullet"><div class="rv-bullet-dot"></div><div class="rv-bullet-txt">Value-add by floor plan &amp; revenue levers</div></div>
   <div class="rv-bullet"><div class="rv-bullet-dot"></div><div class="rv-bullet-txt">Financing &amp; debt terms (incl. IO period)</div></div>
   <div class="rv-bullet"><div class="rv-bullet-dot"></div><div class="rv-bullet-txt">Underwriting flags</div></div>
+  <div class="rv-bullet"><div class="rv-bullet-dot"></div><div class="rv-bullet-txt">Property tax &amp; abatement</div></div>
+  <div class="rv-bullet"><div class="rv-bullet-dot"></div><div class="rv-bullet-txt">Replacement cost, insurance &amp; management</div></div>
   <hr class="rv-divider">
   <div class="rv-panel-heading">Tab 2 — Comparables</div>
   <div class="rv-bullet"><div class="rv-bullet-dot"></div><div class="rv-bullet-txt">Garden &amp; townhouse rent comps</div></div>
@@ -1481,8 +1481,7 @@ with right_col:
   <div class="rv-bullet"><div class="rv-bullet-dot"></div><div class="rv-bullet-txt">Population &amp; income (3-mi / 5-mi)</div></div>
   <div class="rv-bullet"><div class="rv-bullet-dot"></div><div class="rv-bullet-txt">Affordability analysis</div></div>
   <div class="rv-bullet"><div class="rv-bullet-dot"></div><div class="rv-bullet-txt">Schools, crime &amp; quality of life</div></div>
-  <div class="rv-bullet"><div class="rv-bullet-dot"></div><div class="rv-bullet-txt">Major employers &amp; developments</div></div>
-  <div class="rv-bullet"><div class="rv-bullet-dot"></div><div class="rv-bullet-txt">Market &amp; submarket overview</div></div>
+  <div class="rv-bullet"><div class="rv-bullet-dot"></div><div class="rv-bullet-txt">Additional income</div></div>
   <div class="rv-bullet"><div class="rv-bullet-dot"></div><div class="rv-bullet-txt">Utilities &amp; site information</div></div>
   <hr class="rv-divider">
   <div class="rv-panel-heading">Supported Brokers</div>
