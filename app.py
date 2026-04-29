@@ -1294,8 +1294,41 @@ def build_excel(d: dict, filename: str) -> bytes:
     r = 1
     r = _cover(ws3, r, f"DEMOGRAPHICS & MARKET OVERVIEW  |  {prop}", subtitle, n=6)
 
-    # ── A. Population & Income ────────────────────────────────────────────────
-    r = _sec(ws3, r, "A.  POPULATION & INCOME DEMOGRAPHICS", n=6)
+    # ── A. Additional Income ──────────────────────────────────────────────────
+    add_inc = inv.get("additional_income") or []
+    if add_inc:
+        r = _sec(ws3, r, "A.  ADDITIONAL INCOME", n=6)
+        r = _thdr(ws3, r, ["Income Item","Category","Fee/Unit/Mo","Occ %",
+                            "Monthly Income","Current Annual","Pro Forma Annual","Calculation Detail"], n=6)
+        for i, inc in enumerate(add_inc):
+            r = _drow(ws3, r, [
+                inc.get("name") or "—", inc.get("category") or "—",
+                _v(inc.get("fee_per_unit_per_month"), "$") if inc.get("fee_per_unit_per_month") else "—",
+                inc.get("occupancy_assumption") or "—",
+                _v(inc.get("monthly_income"), "$") if inc.get("monthly_income") else "—",
+                _v(inc.get("current_annual"), "$") if inc.get("current_annual") else "—",
+                _v(inc.get("proforma_annual"), "$") if inc.get("proforma_annual") else "—",
+                inc.get("calculation_detail") or inc.get("notes") or "—",
+            ], alt=bool(i % 2), n=6,
+               als=["left","left","right","center","right","right","right","left"])
+        r = _sp(ws3, r)
+
+    # ── B. Utilities ──────────────────────────────────────────────────────────
+    r = _sec(ws3, r, "B.  UTILITY INFORMATION", n=6)
+    if utils_:
+        r = _thdr(ws3, r, ["Utility","Billing Method","Paid By","Reimbursement","Annual Income","Notes"], n=6)
+        for i, u in enumerate(utils_):
+            r = _drow(ws3, r, [
+                u.get("name","—"), u.get("method") or "—", u.get("paid_by") or "—",
+                u.get("reimbursement") or "N/A",
+                _v(u.get("annual_income"), "$"), u.get("notes") or "—",
+            ], alt=bool(i % 2), als=["left","center","center","left","right","left"], n=6)
+    else:
+        r = _kv(ws3, r, "Note", "No utility data found in OM.", n=6)
+    r = _sp(ws3, r)
+
+    # ── C. Population & Income ────────────────────────────────────────────────
+    r = _sec(ws3, r, "C.  POPULATION & INCOME DEMOGRAPHICS", n=6)
     has_demo = any(demo.get(k) for k in ["pop_1mi","pop_3mi","pop_5mi","median_income_3mi"])
     if not has_demo:
         _fr(ws3, r, 6, C_WARN)
@@ -1327,8 +1360,8 @@ def build_excel(d: dict, filename: str) -> bytes:
         ws3.row_dimensions[r].height = 16; r += 1
     r = _sp(ws3, r)
 
-    # ── B. Affordability ──────────────────────────────────────────────────────
-    r = _sec(ws3, r, "B.  AFFORDABILITY & RENT GROWTH RUNWAY", n=6)
+    # ── D. Affordability ──────────────────────────────────────────────────────
+    r = _sec(ws3, r, "D.  AFFORDABILITY & RENT GROWTH RUNWAY", n=6)
     r = _thdr(ws3, r, ["Metric","2025 (3-Mile)","2030 Proj. (3-Mile)","Notes"], n=6)
     for i, (metric, v25, v30, note) in enumerate([
         ("Current In-Place Rent",          _v(afford.get("current_rent"),"$"), "—", "Subject effective rent"),
@@ -1348,8 +1381,8 @@ def build_excel(d: dict, filename: str) -> bytes:
         ws3.row_dimensions[r].height = 16; r += 1
     r = _sp(ws3, r)
 
-    # ── C. Schools & Crime ────────────────────────────────────────────────────
-    r = _sec(ws3, r, "C.  SCHOOLS, CRIME & QUALITY OF LIFE", n=6)
+    # ── E. Schools & Crime ────────────────────────────────────────────────────
+    r = _sec(ws3, r, "E.  SCHOOLS, CRIME & QUALITY OF LIFE", n=6)
     r = _shdr(ws3, r, "Assigned Schools  (source: greatschools.org)", n=6)
     for i, (k, v) in enumerate([
         ("School District", demo.get("school_district") or "Not provided — verify via district map"),
@@ -1360,39 +1393,6 @@ def build_excel(d: dict, filename: str) -> bytes:
         r = _kv(ws3, r, k, v, alt=bool(i % 2), n=6)
     r = _shdr(ws3, r, "Crime  (source: crimegrade.org)", n=6)
     r = _kv(ws3, r, "Crime Data", demo.get("crime") or "Not provided in OM — source independently at crimegrade.org", n=6)
-    r = _sp(ws3, r)
-
-    # ── D. Additional Income ──────────────────────────────────────────────────
-    add_inc = inv.get("additional_income") or []
-    if add_inc:
-        r = _sec(ws3, r, "D.  ADDITIONAL INCOME", n=6)
-        r = _thdr(ws3, r, ["Income Item","Category","Fee/Unit/Mo","Occ %",
-                            "Monthly Income","Current Annual","Pro Forma Annual","Calculation Detail"], n=6)
-        for i, inc in enumerate(add_inc):
-            r = _drow(ws3, r, [
-                inc.get("name") or "—", inc.get("category") or "—",
-                _v(inc.get("fee_per_unit_per_month"), "$") if inc.get("fee_per_unit_per_month") else "—",
-                inc.get("occupancy_assumption") or "—",
-                _v(inc.get("monthly_income"), "$") if inc.get("monthly_income") else "—",
-                _v(inc.get("current_annual"), "$") if inc.get("current_annual") else "—",
-                _v(inc.get("proforma_annual"), "$") if inc.get("proforma_annual") else "—",
-                inc.get("calculation_detail") or inc.get("notes") or "—",
-            ], alt=bool(i % 2), n=6,
-               als=["left","left","right","center","right","right","right","left"])
-        r = _sp(ws3, r)
-
-    # ── E. Utilities ──────────────────────────────────────────────────────────
-    r = _sec(ws3, r, "E.  UTILITY INFORMATION", n=6)
-    if utils_:
-        r = _thdr(ws3, r, ["Utility","Billing Method","Paid By","Reimbursement","Annual Income","Notes"], n=6)
-        for i, u in enumerate(utils_):
-            r = _drow(ws3, r, [
-                u.get("name","—"), u.get("method") or "—", u.get("paid_by") or "—",
-                u.get("reimbursement") or "N/A",
-                _v(u.get("annual_income"), "$"), u.get("notes") or "—",
-            ], alt=bool(i % 2), als=["left","center","center","left","right","left"], n=6)
-    else:
-        r = _kv(ws3, r, "Note", "No utility data found in OM.", n=6)
     r = _sp(ws3, r)
 
     # ── F. Site Info ──────────────────────────────────────────────────────────
@@ -1549,11 +1549,11 @@ with right_col:
   <div class="rv-bullet"><div class="rv-bullet-dot"></div><div class="rv-bullet-txt">Sale comparables with buyer/seller</div></div>
   <hr class="rv-divider">
   <div class="rv-panel-heading">Tab 3 — Demographics</div>
+  <div class="rv-bullet"><div class="rv-bullet-dot"></div><div class="rv-bullet-txt">Additional income</div></div>
+  <div class="rv-bullet"><div class="rv-bullet-dot"></div><div class="rv-bullet-txt">Utilities &amp; site information</div></div>
   <div class="rv-bullet"><div class="rv-bullet-dot"></div><div class="rv-bullet-txt">Population &amp; income (1-mi / 3-mi / 5-mi)</div></div>
   <div class="rv-bullet"><div class="rv-bullet-dot"></div><div class="rv-bullet-txt">Affordability analysis</div></div>
   <div class="rv-bullet"><div class="rv-bullet-dot"></div><div class="rv-bullet-txt">Schools, crime &amp; quality of life</div></div>
-  <div class="rv-bullet"><div class="rv-bullet-dot"></div><div class="rv-bullet-txt">Additional income</div></div>
-  <div class="rv-bullet"><div class="rv-bullet-dot"></div><div class="rv-bullet-txt">Utilities &amp; site information</div></div>
   <div class="rv-bullet"><div class="rv-bullet-dot"></div><div class="rv-bullet-txt">Major employers &amp; economic drivers</div></div>
   <div class="rv-bullet"><div class="rv-bullet-dot"></div><div class="rv-bullet-txt">Market &amp; submarket overview</div></div>
   <div class="rv-bullet"><div class="rv-bullet-dot"></div><div class="rv-bullet-txt">Supply &amp; demand / pipeline</div></div>
