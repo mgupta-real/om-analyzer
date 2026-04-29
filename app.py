@@ -1599,13 +1599,47 @@ st.markdown("""
 main_col, right_col = st.columns([2.2, 1], gap="small")
 
 with right_col:
-    # ── Panel header ──────────────────────────────────────────────────────────
+    # Style the entire right column as the panel
     st.markdown("""
-<div class="rv-right-panel">
-  <div class="rv-panel-heading">What's in the Report</div>
-  <div class="rv-panel-heading" style="margin-top:14px;">Tab 1 — Financials</div>
-</div>
+<style>
+/* Right column = the panel */
+[data-testid="stHorizontalBlock"] > div:last-child {
+    background: #091420 !important;
+    border-left: 1px solid #1A2E42 !important;
+    padding: 28px 20px 28px 20px !important;
+    margin-right: -5rem !important;
+    min-height: 100vh !important;
+}
+/* Checkboxes */
+[data-testid="stCheckbox"] {
+    background: transparent !important;
+    padding: 1px 0 !important;
+    margin-bottom: 1px !important;
+}
+[data-testid="stCheckbox"] p {
+    font-size: 13px !important;
+    color: #5A8FAA !important;
+    line-height: 1.4 !important;
+}
+[data-testid="stCheckbox"]:hover p { color: #8ABDD0 !important; }
+[data-testid="stCheckbox"] input:checked + div,
+[data-testid="stCheckbox"] input:checked ~ div { background: #1DC9A4 !important; border-color: #1DC9A4 !important; }
+[data-testid="stCheckbox"] svg { color: #0D1B2A !important; }
+/* Select/Deselect buttons */
+[data-testid="column"] [data-testid="stButton"] > button {
+    background: #0F2133 !important; border: 1px solid #1A3250 !important;
+    color: #1DC9A4 !important; font-size: 11px !important;
+    font-weight: 600 !important; padding: 5px 0 !important;
+    border-radius: 6px !important; margin-top: 4px !important;
+}
+[data-testid="column"] [data-testid="stButton"] > button:hover { background: #1DC9A420 !important; }
+/* Divider between sections */
+.rv-cb-divider { border-top: 1px solid #152030; margin: 10px 0 8px; }
+</style>
 """, unsafe_allow_html=True)
+
+    st.markdown('<div class="rv-panel-heading" style="margin-top:0;">What\'s in the Report</div>', unsafe_allow_html=True)
+    st.markdown('<div class="rv-panel-heading" style="margin-top:10px;">Tab 1 — Financials</div>', unsafe_allow_html=True)
 
     sel_deal      = st.checkbox("Deal summary & property details",          value=True, key="sel_deal")
     sel_unitmix   = st.checkbox("Unit mix with rent upside",                value=True, key="sel_unitmix")
