@@ -16,7 +16,7 @@ html, body, [class*="css"], .stApp, .main {
     background-color: #0D1B2A !important; color: #E0E6EF !important;
 }
 .block-container {
-padding-top: 0 !important; max-width: 1100px !important;
+padding-top: 0 !important; max-width: 50% !important;
 padding-left: 0 !important; padding-right: 0 !important;
 background: #0D1B2A !important;
 }
