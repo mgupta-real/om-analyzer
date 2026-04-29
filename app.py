@@ -95,44 +95,37 @@ section[data-testid="stSidebar"] { display: none !important; }
 .rv-success-text { font-size: 14px; color: #C0D0E0; }
 .rv-success-text b { color: #1DC9A4; }
 
-/* Checkboxes in right panel — native Streamlit styled dark */
+/* ── Right panel column ── */
+[data-testid="stHorizontalBlock"] > div:last-child {
+    background: #091420 !important;
+    border-left: 1px solid #1A2E42 !important;
+    padding: 20px 16px 28px !important;
+    margin-right: -5rem !important;
+    min-height: 100vh !important;
+}
+/* ── Checkboxes ── */
 [data-testid="stCheckbox"] {
     background: transparent !important;
-    padding: 2px 4px 2px 0 !important;
-    margin-bottom: 2px !important;
+    padding: 2px 0 3px !important;
 }
-[data-testid="stCheckbox"] > label {
-    display: flex !important;
+[data-testid="stCheckbox"] label {
+    gap: 8px !important;
     align-items: flex-start !important;
-    gap: 9px !important;
-    cursor: pointer !important;
 }
-[data-testid="stCheckbox"] p {
-    font-size: 13px !important;
+[data-testid="stCheckbox"] label p,
+[data-testid="stCheckbox"] label span:not([data-testid]) {
+    font-size: 12px !important;
     color: #5A8FAA !important;
-    line-height: 1.45 !important;
-    margin: 0 !important;
+    line-height: 1.4 !important;
 }
-[data-testid="stCheckbox"]:hover p { color: #8ABDD0 !important; }
-/* Checkbox box itself */
-[data-testid="stCheckbox"] [data-testid="stWidgetLabel"] { display: none !important; }
-[data-testid="stCheckbox"] > label > div:first-child {
-    width: 15px !important; height: 15px !important;
-    border: 1.5px solid #2A5070 !important;
-    border-radius: 3px !important;
-    background: #0B1E30 !important;
-    flex-shrink: 0 !important;
-    margin-top: 2px !important;
-}
-[data-testid="stCheckbox"] input:checked ~ div {
-    background: #1DC9A4 !important;
+[data-testid="stCheckbox"] input:checked ~ div,
+[data-testid="stCheckbox"] input:checked + div {
+    background-color: #1DC9A4 !important;
     border-color: #1DC9A4 !important;
 }
-[data-testid="stCheckbox"] svg { color: #0D1B2A !important; }
-/* Divider between tab groups */
-.rv-cb-divider { border-top: 1px solid #152030; margin: 12px 0 10px; }
-/* Select/Deselect buttons */
-[data-testid="stHorizontalBlock"] [data-testid="stButton"] button {
+[data-testid="stCheckbox"] svg { color: #0A1520 !important; }
+/* ── Select/Deselect buttons (top of panel) ── */
+[data-testid="stHorizontalBlock"] > div:last-child [data-testid="stButton"] button {
     background: #0F2133 !important;
     border: 1px solid #1A3250 !important;
     color: #1DC9A4 !important;
@@ -141,13 +134,16 @@ section[data-testid="stSidebar"] { display: none !important; }
     padding: 5px 0 !important;
     border-radius: 6px !important;
 }
-[data-testid="column"]:last-child {
-    padding-right: 0 !important;
-    margin-right: 0 !important;
+[data-testid="stHorizontalBlock"] > div:last-child [data-testid="stButton"] button:hover {
+    background: #1DC9A420 !important;
 }
-[data-testid="column"]:last-child > div:first-child {
-    padding-right: 0 !important;
-}
+/* ── Panel headings and dividers ── */
+.rvph  { font-size:10px; font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:#1DC9A4; margin:14px 0 8px; display:block; }
+.rvph2 { font-size:10px; font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:#1DC9A4; margin:10px 0 6px; display:block; }
+.rvdiv { border:none; border-top:1px solid #152030; margin:10px 0 6px; }
+.rvmeta { font-size:10px; color:#2A4860; margin-top:4px; }
+.rvmeta span { color:#4A7090; }
+.rvbrok { font-size:10px; color:#2A4860; line-height:1.8; margin-top:4px; }
 /* Kill Streamlit's outer block container right padding */
 .block-container {
     padding-right: 0 !important;
@@ -1607,86 +1603,45 @@ with right_col:
         if "sel_"+k not in st.session_state:
             st.session_state["sel_"+k] = True
 
-    # Handle select/deselect all via query params
-    qp = st.query_params
-    if qp.get("_action") == "selall":
-        for k in _keys: st.session_state["sel_"+k] = True
-        st.query_params.clear()
-        st.rerun()
-    if qp.get("_action") == "deselall":
-        for k in _keys: st.session_state["sel_"+k] = False
-        st.query_params.clear()
-        st.rerun()
-    for k in _keys:
-        if qp.get("_tog") == k:
-            st.session_state["sel_"+k] = not st.session_state.get("sel_"+k, True)
-            st.query_params.clear()
+    # Select All / Deselect All buttons
+    _b1, _b2 = st.columns(2)
+    with _b1:
+        if st.button("✓ Select All", key="btn_sel", use_container_width=True):
+            for k in _keys: st.session_state["sel_"+k] = True
+            st.rerun()
+    with _b2:
+        if st.button("✕ Deselect All", key="btn_des", use_container_width=True):
+            for k in _keys: st.session_state["sel_"+k] = False
             st.rerun()
 
-    sel_deal=st.session_state["sel_deal"]; sel_unitmix=st.session_state["sel_unitmix"]
-    sel_opstat=st.session_state["sel_opstat"]; sel_valueadd=st.session_state["sel_valueadd"]
-    sel_financing=st.session_state["sel_financing"]; sel_flags=st.session_state["sel_flags"]
-    sel_tax=st.session_state["sel_tax"]; sel_repl=st.session_state["sel_repl"]
-    sel_rentcomps=st.session_state["sel_rentcomps"]; sel_addinc2=st.session_state["sel_addinc2"]
-    sel_salecomps=st.session_state["sel_salecomps"]; sel_addinc=st.session_state["sel_addinc"]
-    sel_utilities=st.session_state["sel_utilities"]; sel_pop=st.session_state["sel_pop"]
-    sel_afford=st.session_state["sel_afford"]; sel_schools=st.session_state["sel_schools"]
-    sel_employers=st.session_state["sel_employers"]; sel_market=st.session_state["sel_market"]
+    st.markdown('<div class="rvdiv"></div><div class="rvph">What\'s in the Report</div>', unsafe_allow_html=True)
+    st.markdown('<div class="rvph2">Tab 1 — Financials</div>', unsafe_allow_html=True)
+    sel_deal      = st.checkbox("Deal summary & property details",          value=st.session_state["sel_deal"],      key="sel_deal")
+    sel_unitmix   = st.checkbox("Unit mix with rent upside",                value=st.session_state["sel_unitmix"],   key="sel_unitmix")
+    sel_opstat    = st.checkbox("Operating statement (all periods)",        value=st.session_state["sel_opstat"],    key="sel_opstat")
+    sel_valueadd  = st.checkbox("Value-add by floor plan & revenue levers", value=st.session_state["sel_valueadd"], key="sel_valueadd")
+    sel_financing = st.checkbox("Financing & debt terms (incl. IO period)", value=st.session_state["sel_financing"],key="sel_financing")
+    sel_flags     = st.checkbox("Underwriting flags",                       value=st.session_state["sel_flags"],     key="sel_flags")
+    sel_tax       = st.checkbox("Property tax & abatement",                 value=st.session_state["sel_tax"],       key="sel_tax")
+    sel_repl      = st.checkbox("Replacement cost, insurance & management", value=st.session_state["sel_repl"],      key="sel_repl")
+    st.markdown('<div class="rvdiv"></div><div class="rvph2">Tab 2 — Comparables</div>', unsafe_allow_html=True)
+    sel_rentcomps = st.checkbox("Garden & townhouse rent comps",            value=st.session_state["sel_rentcomps"], key="sel_rentcomps")
+    sel_addinc2   = st.checkbox("Additional income opportunities",          value=st.session_state["sel_addinc2"],   key="sel_addinc2")
+    sel_salecomps = st.checkbox("Sale comparables with buyer/seller",       value=st.session_state["sel_salecomps"], key="sel_salecomps")
+    st.markdown('<div class="rvdiv"></div><div class="rvph2">Tab 3 — Demographics</div>', unsafe_allow_html=True)
+    sel_addinc    = st.checkbox("Additional income",                        value=st.session_state["sel_addinc"],    key="sel_addinc")
+    sel_utilities = st.checkbox("Utilities & site information",             value=st.session_state["sel_utilities"], key="sel_utilities")
+    sel_pop       = st.checkbox("Population & income (1-mi / 3-mi / 5-mi)",value=st.session_state["sel_pop"],       key="sel_pop")
+    sel_afford    = st.checkbox("Affordability analysis",                   value=st.session_state["sel_afford"],    key="sel_afford")
+    sel_schools   = st.checkbox("Schools, crime & quality of life",         value=st.session_state["sel_schools"],   key="sel_schools")
+    sel_employers = st.checkbox("Major employers & economic drivers",       value=st.session_state["sel_employers"], key="sel_employers")
+    sel_market    = st.checkbox("Market, submarket & supply/demand",        value=st.session_state["sel_market"],    key="sel_market")
 
     _n_sel = sum([sel_deal,sel_unitmix,sel_opstat,sel_valueadd,sel_financing,
                   sel_flags,sel_tax,sel_repl,sel_rentcomps,sel_addinc2,sel_salecomps,
                   sel_addinc,sel_utilities,sel_pop,sel_afford,sel_schools,sel_employers,sel_market])
 
-    def _c(k): return "rv-cb on" if st.session_state.get("sel_"+k,True) else "rv-cb"
-
-    _panel_html = f"""<style>
-[data-testid="stHorizontalBlock"]>div:last-child{{background:#091420!important;border-left:1px solid #1A2E42!important;padding:24px 18px 28px!important;margin-right:-5rem!important;min-height:100vh!important;}}
-.rvph{{font-size:10px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#1DC9A4;margin-bottom:8px;margin-top:16px;display:block;}}
-.rv-cb-row{{display:flex;align-items:flex-start;gap:9px;margin-bottom:7px;cursor:pointer;user-select:none;}}
-.rv-cb-row:hover .rv-cb-txt{{color:#8ABDD0!important;}}
-.rv-cb{{width:14px;height:14px;border:1.5px solid #2A5070;border-radius:3px;background:#0B1E30;flex-shrink:0;margin-top:2px;display:flex;align-items:center;justify-content:center;transition:.15s;}}
-.rv-cb.on{{background:#1DC9A4!important;border-color:#1DC9A4!important;}}
-.rv-cb.on::after{{content:\'\';display:block;width:3px;height:6px;border:2px solid #0D1B2A;border-top:none;border-left:none;transform:rotate(45deg) translate(1px,-1px);}}
-.rv-cb-txt{{font-size:12px;color:#5A8FAA;line-height:1.4;}}
-.rvdiv{{border:none;border-top:1px solid #152030;margin:10px 0 8px;}}
-.rv-btn-row{{display:flex;gap:6px;margin-top:10px;}}
-.rv-btn{{flex:1;background:#0F2133;border:1px solid #1A3250;color:#1DC9A4;border-radius:6px;padding:7px 0;font-size:11px;font-weight:600;cursor:pointer;text-align:center;text-decoration:none;display:block;}}
-.rv-btn:hover{{background:#1DC9A420;}}
-.rv-sc{{font-size:11px;color:#3A6080;margin-top:7px;text-align:center;}}
-.rvmeta{{font-size:10px;color:#2A4860;margin-top:4px;}}
-.rvmeta span{{color:#4A7090;}}
-.rvbrok{{font-size:10px;color:#2A4860;line-height:1.8;margin-top:4px;}}
-</style>
-<div class="rvph" style="margin-top:0;">What's in the Report</div>
-<div class="rvph" style="margin-top:12px;">Tab 1 — Financials</div>
-<div class="rv-cb-row" onclick="tog('deal')"><div class="{_c('deal')}" id="cb_deal"></div><div class="rv-cb-txt">Deal summary &amp; property details</div></div>
-<div class="rv-cb-row" onclick="tog('unitmix')"><div class="{_c('unitmix')}" id="cb_unitmix"></div><div class="rv-cb-txt">Unit mix with rent upside</div></div>
-<div class="rv-cb-row" onclick="tog('opstat')"><div class="{_c('opstat')}" id="cb_opstat"></div><div class="rv-cb-txt">Operating statement (all periods)</div></div>
-<div class="rv-cb-row" onclick="tog('valueadd')"><div class="{_c('valueadd')}" id="cb_valueadd"></div><div class="rv-cb-txt">Value-add by floor plan &amp; revenue levers</div></div>
-<div class="rv-cb-row" onclick="tog('financing')"><div class="{_c('financing')}" id="cb_financing"></div><div class="rv-cb-txt">Financing &amp; debt terms (incl. IO period)</div></div>
-<div class="rv-cb-row" onclick="tog('flags')"><div class="{_c('flags')}" id="cb_flags"></div><div class="rv-cb-txt">Underwriting flags</div></div>
-<div class="rv-cb-row" onclick="tog('tax')"><div class="{_c('tax')}" id="cb_tax"></div><div class="rv-cb-txt">Property tax &amp; abatement</div></div>
-<div class="rv-cb-row" onclick="tog('repl')"><div class="{_c('repl')}" id="cb_repl"></div><div class="rv-cb-txt">Replacement cost, insurance &amp; management</div></div>
-<div class="rvdiv"></div>
-<div class="rvph">Tab 2 — Comparables</div>
-<div class="rv-cb-row" onclick="tog('rentcomps')"><div class="{_c('rentcomps')}" id="cb_rentcomps"></div><div class="rv-cb-txt">Garden &amp; townhouse rent comps</div></div>
-<div class="rv-cb-row" onclick="tog('addinc2')"><div class="{_c('addinc2')}" id="cb_addinc2"></div><div class="rv-cb-txt">Additional income opportunities</div></div>
-<div class="rv-cb-row" onclick="tog('salecomps')"><div class="{_c('salecomps')}" id="cb_salecomps"></div><div class="rv-cb-txt">Sale comparables with buyer/seller</div></div>
-<div class="rvdiv"></div>
-<div class="rvph">Tab 3 — Demographics</div>
-<div class="rv-cb-row" onclick="tog('addinc')"><div class="{_c('addinc')}" id="cb_addinc"></div><div class="rv-cb-txt">Additional income</div></div>
-<div class="rv-cb-row" onclick="tog('utilities')"><div class="{_c('utilities')}" id="cb_utilities"></div><div class="rv-cb-txt">Utilities &amp; site information</div></div>
-<div class="rv-cb-row" onclick="tog('pop')"><div class="{_c('pop')}" id="cb_pop"></div><div class="rv-cb-txt">Population &amp; income (1-mi / 3-mi / 5-mi)</div></div>
-<div class="rv-cb-row" onclick="tog('afford')"><div class="{_c('afford')}" id="cb_afford"></div><div class="rv-cb-txt">Affordability analysis</div></div>
-<div class="rv-cb-row" onclick="tog('schools')"><div class="{_c('schools')}" id="cb_schools"></div><div class="rv-cb-txt">Schools, crime &amp; quality of life</div></div>
-<div class="rv-cb-row" onclick="tog('employers')"><div class="{_c('employers')}" id="cb_employers"></div><div class="rv-cb-txt">Major employers &amp; economic drivers</div></div>
-<div class="rv-cb-row" onclick="tog('market')"><div class="{_c('market')}" id="cb_market"></div><div class="rv-cb-txt">Market, submarket &amp; supply/demand</div></div>
-<div class="rvdiv"></div>
-<div class="rv-btn-row">
-  <a class="rv-btn" href="?_action=selall">✓ Select All</a>
-  <a class="rv-btn" href="?_action=deselall">✕ Deselect All</a>
-</div>
-<div class="rv-sc">{_n_sel} / 18 selected</div>
+    st.markdown(f"""
 <div class="rvdiv"></div>
 <div class="rvph">Supported Brokers</div>
 <div class="rvbrok">JLL · CBRE · Marcus &amp; Millichap · Cushman &amp; Wakefield · Newmark · Colliers · Berkadia · Walker &amp; Dunlop · Northmarq</div>
@@ -1694,23 +1649,8 @@ with right_col:
 <div class="rvmeta">Processing time: <span>30–90 sec</span></div>
 <div class="rvmeta">Max file size: <span>50 MB</span></div>
 <div class="rvmeta">Output: <span>3-tab Excel (.xlsx)</span></div>
-<script>
-const KEYS=["deal","unitmix","opstat","valueadd","financing","flags","tax","repl","rentcomps","addinc2","salecomps","addinc","utilities","pop","afford","schools","employers","market"];
-function tog(k){{
-  const cb=document.getElementById("cb_"+k);
-  if(!cb)return;
-  const on=cb.classList.toggle("on");
-  const u=new URL(window.location.href);
-  u.searchParams.set("_tog",k);
-  window.location.href=u.toString();
-}}
-function upd(){{
-  const n=KEYS.filter(k=>document.getElementById("cb_"+k)?.classList.contains("on")).length;
-  const el=document.getElementById("rv_sc");
-  if(el)el.textContent=n+" / 18 selected";
-}}
-</script>"""
-    st.markdown(_panel_html, unsafe_allow_html=True)
+<div class="rvmeta" style="margin-top:6px;"><span style="color:#1DC9A4;font-weight:700;">{_n_sel} / 18</span> <span>sections selected</span></div>
+""", unsafe_allow_html=True)
 
 with main_col:
     st.markdown("""
