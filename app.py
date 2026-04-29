@@ -46,7 +46,8 @@ section[data-testid="stSidebar"] { display: none !important; }
 .rv-right-panel {
     width: 380px; flex-shrink: 0; background: #091420;
     border-left: 1px solid #1A2E42; padding: 36px 28px;
-    margin-right: -2rem;
+    margin-right: -5rem;
+    min-height: 100vh;
 }
 .rv-panel-heading {
     font-size: 13px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase;
@@ -101,6 +102,19 @@ section[data-testid="stSidebar"] { display: none !important; }
 }
 [data-testid="column"]:last-child > div:first-child {
     padding-right: 0 !important;
+}
+/* Kill Streamlit's outer block container right padding */
+.block-container {
+    padding-right: 0 !important;
+}
+section.main > div.block-container {
+    padding-right: 0 !important;
+}
+/* Stretch the last column div to viewport edge */
+[data-testid="stHorizontalBlock"] > div:last-child {
+    padding-right: 0 !important;
+    margin-right: 0 !important;
+    flex-shrink: 0 !important;
 }
 div[data-testid="stFileUploaderDropzoneInput"],
 .stFileUploader {
