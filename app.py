@@ -111,8 +111,6 @@ section[data-testid="stSidebar"] { display: none !important; }
 [data-testid="stCheckbox"] label {
     gap: 8px !important;
     align-items: flex-start !important;
-    background: transparent !important;
-    background-color: transparent !important;
 }
 [data-testid="stCheckbox"] label p,
 [data-testid="stCheckbox"] label span:not([data-testid]) {
@@ -120,7 +118,6 @@ section[data-testid="stSidebar"] { display: none !important; }
     color: #5A8FAA !important;
     line-height: 1.4 !important;
     background: transparent !important;
-    background-color: transparent !important;
 }
 [data-testid="stCheckbox"] input:checked ~ div,
 [data-testid="stCheckbox"] input:checked + div {
