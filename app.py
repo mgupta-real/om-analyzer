@@ -1605,21 +1605,7 @@ with right_col:
             st.session_state["sel_"+k] = True
 
     st.markdown('<div class="rvph" style="margin-top:0;">What\'s in the Report</div>', unsafe_allow_html=True)
-
-    # Select All / Deselect All at the top — always visible
-    _b1, _b2 = st.columns(2)
-    with _b1:
-        if st.button("✓ Select All", key="btn_sel", use_container_width=True):
-            for k in _keys: st.session_state["sel_"+k] = True
-            st.rerun()
-    with _b2:
-        if st.button("✕ Deselect All", key="btn_des", use_container_width=True):
-            for k in _keys: st.session_state["sel_"+k] = False
-            st.rerun()
-
-    _n_sel_pre = sum([st.session_state.get("sel_"+k, True) for k in _keys])
-    st.markdown(f'<div class="rvcnt">{_n_sel_pre} / 18 selected</div>', unsafe_allow_html=True)
-    st.markdown('<div class="rvdiv"></div><div class="rvph2">Tab 1 — Financials</div>', unsafe_allow_html=True)
+    st.markdown('<div class="rvph2">Tab 1 — Financials</div>', unsafe_allow_html=True)
     sel_deal      = st.checkbox("Deal summary & property details",          value=st.session_state["sel_deal"],      key="sel_deal")
     sel_unitmix   = st.checkbox("Unit mix with rent upside",                value=st.session_state["sel_unitmix"],   key="sel_unitmix")
     sel_opstat    = st.checkbox("Operating statement (all periods)",        value=st.session_state["sel_opstat"],    key="sel_opstat")
@@ -1644,6 +1630,18 @@ with right_col:
     _n_sel = sum([sel_deal,sel_unitmix,sel_opstat,sel_valueadd,sel_financing,
                   sel_flags,sel_tax,sel_repl,sel_rentcomps,sel_addinc2,sel_salecomps,
                   sel_addinc,sel_utilities,sel_pop,sel_afford,sel_schools,sel_employers,sel_market])
+
+    # Buttons at the bottom
+    st.markdown(f'<div class="rvdiv"></div><div class="rvcnt">{_n_sel} / 18 selected</div>', unsafe_allow_html=True)
+    _b1, _b2 = st.columns(2)
+    with _b1:
+        if st.button("✓ Select All", key="btn_sel", use_container_width=True):
+            for k in _keys: st.session_state["sel_"+k] = True
+            st.rerun()
+    with _b2:
+        if st.button("✕ Deselect All", key="btn_des", use_container_width=True):
+            for k in _keys: st.session_state["sel_"+k] = False
+            st.rerun()
 
     st.markdown(f"""
 <div class="rvdiv"></div>
