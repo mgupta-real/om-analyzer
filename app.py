@@ -1599,42 +1599,69 @@ st.markdown("""
 main_col, right_col = st.columns([2.2, 1], gap="small")
 
 with right_col:
-    # Style the entire right column as the panel
     st.markdown("""
 <style>
-/* Right column = the panel */
+/* Right column styled as panel */
 [data-testid="stHorizontalBlock"] > div:last-child {
     background: #091420 !important;
     border-left: 1px solid #1A2E42 !important;
-    padding: 28px 20px 28px 20px !important;
+    padding: 28px 18px 28px 18px !important;
     margin-right: -5rem !important;
     min-height: 100vh !important;
 }
-/* Checkboxes */
-[data-testid="stCheckbox"] {
-    background: transparent !important;
-    padding: 1px 0 !important;
-    margin-bottom: 1px !important;
+/* Make ALL text inside right column visible */
+[data-testid="stHorizontalBlock"] > div:last-child * {
+    color: #5A8FAA !important;
 }
-[data-testid="stCheckbox"] p {
+[data-testid="stHorizontalBlock"] > div:last-child .rv-panel-heading {
+    color: #1DC9A4 !important;
+    font-size: 11px !important;
+    font-weight: 700 !important;
+    letter-spacing: .12em !important;
+    text-transform: uppercase !important;
+    margin-bottom: 8px !important;
+    margin-top: 16px !important;
+    display: block !important;
+}
+/* Checkbox label text */
+[data-testid="stHorizontalBlock"] > div:last-child [data-testid="stCheckbox"] label span,
+[data-testid="stHorizontalBlock"] > div:last-child [data-testid="stCheckbox"] label p,
+[data-testid="stHorizontalBlock"] > div:last-child [data-testid="stCheckbox"] p {
     font-size: 13px !important;
     color: #5A8FAA !important;
     line-height: 1.4 !important;
 }
-[data-testid="stCheckbox"]:hover p { color: #8ABDD0 !important; }
-[data-testid="stCheckbox"] input:checked + div,
-[data-testid="stCheckbox"] input:checked ~ div { background: #1DC9A4 !important; border-color: #1DC9A4 !important; }
+/* Checkbox box */
+[data-testid="stCheckbox"] {
+    padding: 2px 0 !important;
+    margin-bottom: 2px !important;
+    background: transparent !important;
+}
+/* Teal when checked */
+[data-testid="stCheckbox"] input:checked ~ div,
+[data-testid="stCheckbox"] input:checked + div {
+    background: #1DC9A4 !important;
+    border-color: #1DC9A4 !important;
+}
 [data-testid="stCheckbox"] svg { color: #0D1B2A !important; }
 /* Select/Deselect buttons */
-[data-testid="column"] [data-testid="stButton"] > button {
-    background: #0F2133 !important; border: 1px solid #1A3250 !important;
-    color: #1DC9A4 !important; font-size: 11px !important;
-    font-weight: 600 !important; padding: 5px 0 !important;
-    border-radius: 6px !important; margin-top: 4px !important;
+[data-testid="stHorizontalBlock"] > div:last-child [data-testid="stButton"] > button {
+    background: #0F2133 !important;
+    border: 1px solid #1A3250 !important;
+    color: #1DC9A4 !important;
+    font-size: 11px !important;
+    font-weight: 600 !important;
+    padding: 6px 0 !important;
+    border-radius: 6px !important;
+    width: 100% !important;
 }
-[data-testid="column"] [data-testid="stButton"] > button:hover { background: #1DC9A420 !important; }
-/* Divider between sections */
+[data-testid="stHorizontalBlock"] > div:last-child [data-testid="stButton"] > button:hover {
+    background: #1DC9A420 !important;
+}
 .rv-cb-divider { border-top: 1px solid #152030; margin: 10px 0 8px; }
+.rv-meta { font-size: 11px; color: #2A4860; margin-top: 4px; }
+.rv-meta span { color: #4A7090; }
+.rv-brokers { font-size: 11px; color: #2A4860; line-height: 1.8; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -1668,22 +1695,19 @@ with right_col:
                   sel_flags,sel_tax,sel_repl,sel_rentcomps,sel_addinc2,sel_salecomps,
                   sel_addinc,sel_utilities,sel_pop,sel_afford,sel_schools,sel_employers,sel_market])
 
-    # Select all / Deselect all buttons
-    _ba, _bb = st.columns(2)
-    with _ba:
-        if st.button("✓ Select All",   key="btn_selall",   use_container_width=True):
-            for k in ["sel_deal","sel_unitmix","sel_opstat","sel_valueadd","sel_financing",
-                      "sel_flags","sel_tax","sel_repl","sel_rentcomps","sel_addinc2","sel_salecomps",
-                      "sel_addinc","sel_utilities","sel_pop","sel_afford","sel_schools","sel_employers","sel_market"]:
-                st.session_state[k] = True
-            st.rerun()
-    with _bb:
-        if st.button("✕ Deselect All", key="btn_deselall", use_container_width=True):
-            for k in ["sel_deal","sel_unitmix","sel_opstat","sel_valueadd","sel_financing",
-                      "sel_flags","sel_tax","sel_repl","sel_rentcomps","sel_addinc2","sel_salecomps",
-                      "sel_addinc","sel_utilities","sel_pop","sel_afford","sel_schools","sel_employers","sel_market"]:
-                st.session_state[k] = False
-            st.rerun()
+    st.markdown('<div class="rv-cb-divider"></div>', unsafe_allow_html=True)
+    if st.button("✓  Select All", key="btn_selall", use_container_width=True):
+        for k in ["sel_deal","sel_unitmix","sel_opstat","sel_valueadd","sel_financing",
+                  "sel_flags","sel_tax","sel_repl","sel_rentcomps","sel_addinc2","sel_salecomps",
+                  "sel_addinc","sel_utilities","sel_pop","sel_afford","sel_schools","sel_employers","sel_market"]:
+            st.session_state[k] = True
+        st.rerun()
+    if st.button("✕  Deselect All", key="btn_deselall", use_container_width=True):
+        for k in ["sel_deal","sel_unitmix","sel_opstat","sel_valueadd","sel_financing",
+                  "sel_flags","sel_tax","sel_repl","sel_rentcomps","sel_addinc2","sel_salecomps",
+                  "sel_addinc","sel_utilities","sel_pop","sel_afford","sel_schools","sel_employers","sel_market"]:
+            st.session_state[k] = False
+        st.rerun()
 
     st.markdown(f"""
 <div class="rv-cb-divider"></div>
