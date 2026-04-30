@@ -104,20 +104,16 @@ section[data-testid="stSidebar"] { display: none !important; }
     min-height: auto !important;
 }
 /* ── Checkboxes ── */
-[data-testid="stCheckbox"],
-[data-testid="stCheckbox"] *,
-[data-testid="stCheckbox"] label,
-[data-testid="stCheckbox"] label *,
-[data-testid="stCheckbox"] > label,
-[data-testid="stCheckbox"] > label > div,
-[data-testid="stCheckbox"] > label > div *,
-[data-testid="stCheckbox"] [data-testid="stMarkdownContainer"],
-[data-testid="stCheckbox"] [data-testid="stMarkdownContainer"] * {
+/* ── Checkboxes ── */
+[data-testid="stCheckbox"] {
     background: transparent !important;
     background-color: transparent !important;
-}
-[data-testid="stCheckbox"] {
     padding: 2px 0 3px !important;
+}
+[data-testid="stCheckbox"] label,
+[data-testid="stCheckbox"] label * {
+    background: transparent !important;
+    background-color: transparent !important;
 }
 [data-testid="stCheckbox"] label {
     gap: 8px !important;
@@ -125,8 +121,7 @@ section[data-testid="stSidebar"] { display: none !important; }
 }
 [data-testid="stCheckbox"] label p,
 [data-testid="stCheckbox"] label span,
-[data-testid="stCheckbox"] label div,
-[data-testid="stCheckbox"] [data-testid="stMarkdownContainer"] p {
+[data-testid="stCheckbox"] label div {
     font-size: 12px !important;
     color: #5A8FAA !important;
     line-height: 1.4 !important;
@@ -135,10 +130,10 @@ section[data-testid="stSidebar"] { display: none !important; }
 }
 [data-testid="stCheckbox"] input:checked ~ div,
 [data-testid="stCheckbox"] input:checked + div {
-    background-color: #1DC9A4 !important;
-    border-color: #1DC9A4 !important;
+    background-color: #FFC000 !important;
+    border-color: #FFC000 !important;
 }
-[data-testid="stCheckbox"] svg { color: #0A1520 !important; }
+[data-testid="stCheckbox"] svg { color: #0D1B2A !important; }
 /* ── Select/Deselect buttons (top of panel) ── */
 [data-testid="stHorizontalBlock"] > div:last-child [data-testid="stButton"] button {
     background: #0F2133 !important;
@@ -216,11 +211,11 @@ div[data-testid="stFileUploaderDropzoneInput"],
 }
 .stDownloadButton > button:hover { background: #1DC9A420 !important; }
 div[data-testid="metric-container"] {
-    background: #FFFDE7 !important; border: 1px solid #F0D060 !important;
+    background: #FFFFFF !important; border: 1px solid #D0D0D0 !important;
     border-radius: 10px !important; padding: 14px 16px !important;
 }
-div[data-testid="metric-container"] label { color: #7A6010 !important; font-size: 11px !important; }
-div[data-testid="metric-container"] [data-testid="stMetricValue"] { font-size: 20px !important; color: #1A1A00 !important; font-weight: 600 !important; }
+div[data-testid="metric-container"] label { color: #44546A !important; font-size: 11px !important; font-weight: 600 !important; }
+div[data-testid="metric-container"] [data-testid="stMetricValue"] { font-size: 20px !important; color: #0D1B2A !important; font-weight: 700 !important; }
 .stProgress > div > div { background: #1DC9A4 !important; }
 .stAlert, .stSuccess, .stError, .stInfo { background: #0F2133 !important; border-color: #1E3148 !important; color: #C0D0E0 !important; border-radius: 8px !important; }
 .stTabs [data-baseweb="tab-list"] { background: transparent !important; border-bottom: 1px solid #1E3148 !important; }
