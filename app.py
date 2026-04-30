@@ -74,7 +74,7 @@ section[data-testid="stSidebar"] { display: none !important; }
 
 .rv-upload-card {
     background: #0F2438; border: 1px solid #1A3250; border-radius: 12px;
-    padding: 16px 22px 14px; margin-bottom: 8px;
+    padding: 8px 14px 8px; margin-bottom: 8px;
 }
 .rv-upload-title { font-size: 16px; font-weight: 700; color: #FFFFFF; margin-bottom: 4px; }
 .rv-upload-sub { font-size: 12px; color: #4A7090; }
@@ -99,9 +99,9 @@ section[data-testid="stSidebar"] { display: none !important; }
 [data-testid="stHorizontalBlock"] > div:last-child {
     background: #091420 !important;
     border-left: 1px solid #1A2E42 !important;
-    padding: 20px 16px 28px !important;
+    padding: 10px 12px !important;
     margin-right: -5rem !important;
-    min-height: 100vh !important;
+    min-height: auto !important;
 }
 /* ── Checkboxes ── */
 [data-testid="stCheckbox"],
