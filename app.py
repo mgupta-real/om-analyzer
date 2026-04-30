@@ -1632,9 +1632,8 @@ with right_col:
         with c1:
             st.checkbox("", key=key, label_visibility="collapsed")
         with c2:
-            color = "#FFC000" if checked else "#2A5070"
-            bg = "#FFC000" if checked else "transparent"
-            st.markdown(f'<p style="color:#5A8FAA;font-size:12px;margin-top:6px;margin-bottom:0;">{label}</p>', unsafe_allow_html=True)
+            color = "#FFC000" if checked else "#5A8FAA"
+            st.markdown(f'<p style="color:{color};font-size:12px;margin-top:6px;margin-bottom:0;font-weight:{"600" if checked else "400"};">{label}</p>', unsafe_allow_html=True)
 
     _cb("sel_deal",      "Deal summary &amp; property details")
     _cb("sel_unitmix",   "Unit mix with rent upside")
