@@ -215,7 +215,7 @@ div[data-testid="metric-container"] {
     border-radius: 10px !important; padding: 14px 16px !important;
 }
 div[data-testid="metric-container"] label { color: #44546A !important; font-size: 11px !important; font-weight: 600 !important; }
-div[data-testid="metric-container"] [data-testid="stMetricValue"] { font-size: 20px !important; color: #0D1B2A !important; font-weight: 700 !important; }
+div[data-testid="metric-container"] [data-testid="stMetricValue"] { font-size: 20px !important; color: #FFFFFF !important; font-weight: 700 !important; }
 .stProgress > div > div { background: #1DC9A4 !important; }
 .stAlert, .stSuccess, .stError, .stInfo { background: #0F2133 !important; border-color: #1E3148 !important; color: #C0D0E0 !important; border-radius: 8px !important; }
 .stTabs [data-baseweb="tab-list"] { background: transparent !important; border-bottom: 1px solid #1E3148 !important; }
