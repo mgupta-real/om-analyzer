@@ -16,9 +16,9 @@ html, body, [class*="css"], .stApp, .main {
     background-color: #0D1B2A !important; color: #E0E6EF !important;
 }
 .block-container {
-padding-top: 0 !important; max-width: 100% !important;
-padding-left: 0 !important; padding-right: 0 !important;
-background: #0D1B2A !important;
+    padding-top: 0 !important; max-width: 100% !important;
+    padding-left: 0 !important; padding-right: 0 !important;
+    background: #0D1B2A !important;
 }
 section[data-testid="stSidebar"] { display: none !important; }
 .rv-navbar {
@@ -74,7 +74,7 @@ section[data-testid="stSidebar"] { display: none !important; }
 
 .rv-upload-card {
     background: #0F2438; border: 1px solid #1A3250; border-radius: 12px;
-    padding: 8px 14px 8px; margin-bottom: 8px;
+    padding: 16px 22px 14px; margin-bottom: 8px;
 }
 .rv-upload-title { font-size: 16px; font-weight: 700; color: #FFFFFF; margin-bottom: 4px; }
 .rv-upload-sub { font-size: 12px; color: #4A7090; }
@@ -99,13 +99,24 @@ section[data-testid="stSidebar"] { display: none !important; }
 [data-testid="stHorizontalBlock"] > div:last-child {
     background: #091420 !important;
     border-left: 1px solid #1A2E42 !important;
-    padding: 10px 12px !important;
+    padding: 20px 16px 28px !important;
     margin-right: -5rem !important;
-    min-height: auto !important;
+    min-height: 100vh !important;
 }
 /* ── Checkboxes ── */
-[data-testid="stCheckbox"] {
+[data-testid="stCheckbox"],
+[data-testid="stCheckbox"] *,
+[data-testid="stCheckbox"] label,
+[data-testid="stCheckbox"] label *,
+[data-testid="stCheckbox"] > label,
+[data-testid="stCheckbox"] > label > div,
+[data-testid="stCheckbox"] > label > div *,
+[data-testid="stCheckbox"] [data-testid="stMarkdownContainer"],
+[data-testid="stCheckbox"] [data-testid="stMarkdownContainer"] * {
     background: transparent !important;
+    background-color: transparent !important;
+}
+[data-testid="stCheckbox"] {
     padding: 2px 0 3px !important;
 }
 [data-testid="stCheckbox"] label {
@@ -113,10 +124,14 @@ section[data-testid="stSidebar"] { display: none !important; }
     align-items: flex-start !important;
 }
 [data-testid="stCheckbox"] label p,
-[data-testid="stCheckbox"] label span:not([data-testid]) {
+[data-testid="stCheckbox"] label span,
+[data-testid="stCheckbox"] label div,
+[data-testid="stCheckbox"] [data-testid="stMarkdownContainer"] p {
     font-size: 12px !important;
     color: #5A8FAA !important;
     line-height: 1.4 !important;
+    background: transparent !important;
+    background-color: transparent !important;
 }
 [data-testid="stCheckbox"] input:checked ~ div,
 [data-testid="stCheckbox"] input:checked + div {
@@ -201,11 +216,11 @@ div[data-testid="stFileUploaderDropzoneInput"],
 }
 .stDownloadButton > button:hover { background: #1DC9A420 !important; }
 div[data-testid="metric-container"] {
-    background: #0F2133 !important; border: 1px solid #1E3148 !important;
+    background: #FFFDE7 !important; border: 1px solid #F0D060 !important;
     border-radius: 10px !important; padding: 14px 16px !important;
 }
-div[data-testid="metric-container"] label { color: #5A8FAA !important; font-size: 11px !important; }
-div[data-testid="metric-container"] [data-testid="stMetricValue"] { font-size: 20px !important; color: #FFFFFF !important; font-weight: 600 !important; }
+div[data-testid="metric-container"] label { color: #7A6010 !important; font-size: 11px !important; }
+div[data-testid="metric-container"] [data-testid="stMetricValue"] { font-size: 20px !important; color: #1A1A00 !important; font-weight: 600 !important; }
 .stProgress > div > div { background: #1DC9A4 !important; }
 .stAlert, .stSuccess, .stError, .stInfo { background: #0F2133 !important; border-color: #1E3148 !important; color: #C0D0E0 !important; border-radius: 8px !important; }
 .stTabs [data-baseweb="tab-list"] { background: transparent !important; border-bottom: 1px solid #1E3148 !important; }
@@ -1616,26 +1631,31 @@ def _cb_desall():
 with right_col:
     st.markdown('<div class="rvph" style="margin-top:0;">What\'s in the Report</div>', unsafe_allow_html=True)
     st.markdown('<div class="rvph2">Tab 1 — Financials</div>', unsafe_allow_html=True)
-    st.checkbox("Deal summary & property details",          key="sel_deal")
-    st.checkbox("Unit mix with rent upside",                key="sel_unitmix")
-    st.checkbox("Operating statement (all periods)",        key="sel_opstat")
-    st.checkbox("Value-add by floor plan & revenue levers", key="sel_valueadd")
-    st.checkbox("Financing & debt terms (incl. IO period)", key="sel_financing")
-    st.checkbox("Underwriting flags",                       key="sel_flags")
-    st.checkbox("Property tax & abatement",                 key="sel_tax")
-    st.checkbox("Replacement cost, insurance & management", key="sel_repl")
+    def _cb(key, label):
+        c1, c2 = st.columns([0.08, 0.92])
+        with c1: st.checkbox("", key=key, label_visibility="collapsed")
+        with c2: st.markdown(f'<p style="color:#5A8FAA;font-size:12px;margin-top:6px;margin-bottom:0;">{label}</p>', unsafe_allow_html=True)
+
+    _cb("sel_deal",      "Deal summary &amp; property details")
+    _cb("sel_unitmix",   "Unit mix with rent upside")
+    _cb("sel_opstat",    "Operating statement (all periods)")
+    _cb("sel_valueadd",  "Value-add by floor plan &amp; revenue levers")
+    _cb("sel_financing", "Financing &amp; debt terms (incl. IO period)")
+    _cb("sel_flags",     "Underwriting flags")
+    _cb("sel_tax",       "Property tax &amp; abatement")
+    _cb("sel_repl",      "Replacement cost, insurance &amp; management")
     st.markdown('<div class="rvdiv"></div><div class="rvph2">Tab 2 — Comparables</div>', unsafe_allow_html=True)
-    st.checkbox("Garden & townhouse rent comps",            key="sel_rentcomps")
-    st.checkbox("Additional income opportunities",          key="sel_addinc2")
-    st.checkbox("Sale comparables with buyer/seller",       key="sel_salecomps")
+    _cb("sel_rentcomps", "Garden &amp; townhouse rent comps")
+    _cb("sel_addinc2",   "Additional income opportunities")
+    _cb("sel_salecomps", "Sale comparables with buyer/seller")
     st.markdown('<div class="rvdiv"></div><div class="rvph2">Tab 3 — Demographics</div>', unsafe_allow_html=True)
-    st.checkbox("Additional income",                        key="sel_addinc")
-    st.checkbox("Utilities & site information",             key="sel_utilities")
-    st.checkbox("Population & income (1-mi / 3-mi / 5-mi)",key="sel_pop")
-    st.checkbox("Affordability analysis",                   key="sel_afford")
-    st.checkbox("Schools, crime & quality of life",         key="sel_schools")
-    st.checkbox("Major employers & economic drivers",       key="sel_employers")
-    st.checkbox("Market, submarket & supply/demand",        key="sel_market")
+    _cb("sel_addinc",    "Additional income")
+    _cb("sel_utilities", "Utilities &amp; site information")
+    _cb("sel_pop",       "Population &amp; income (1-mi / 3-mi / 5-mi)")
+    _cb("sel_afford",    "Affordability analysis")
+    _cb("sel_schools",   "Schools, crime &amp; quality of life")
+    _cb("sel_employers", "Major employers &amp; economic drivers")
+    _cb("sel_market",    "Market, submarket &amp; supply/demand")
 
     _n_sel = sum(st.session_state.get("sel_"+k, True) for k in _keys)
     st.markdown(f'<div class="rvdiv"></div><div class="rvcnt">{_n_sel} / 18 selected</div>', unsafe_allow_html=True)
