@@ -104,7 +104,6 @@ section[data-testid="stSidebar"] { display: none !important; }
     min-height: auto !important;
 }
 /* ── Checkboxes ── */
-/* ── Checkboxes ── */
 [data-testid="stCheckbox"] {
     background: transparent !important;
     background-color: transparent !important;
@@ -210,18 +209,41 @@ div[data-testid="stFileUploaderDropzoneInput"],
     padding: 10px 0 !important; width: 100% !important;
 }
 .stDownloadButton > button:hover { background: #1DC9A420 !important; }
+
+/* ── UPDATED: Metric cards ── */
 div[data-testid="metric-container"] {
-    background: #FFFFFF !important; border: 1px solid #D0D0D0 !important;
+    background: #0F2438 !important; border: 1px solid #1E3A55 !important;
     border-radius: 10px !important; padding: 14px 16px !important;
 }
-div[data-testid="metric-container"] label { color: #44546A !important; font-size: 11px !important; font-weight: 600 !important; }
-div[data-testid="metric-container"] [data-testid="stMetricValue"] { font-size: 20px !important; color: #FFFFFF !important; font-weight: 700 !important; }
+div[data-testid="metric-container"] label {
+    color: #5A8FAA !important; font-size: 11px !important; font-weight: 600 !important;
+    text-transform: uppercase !important; letter-spacing: 0.08em !important;
+}
+div[data-testid="metric-container"] [data-testid="stMetricValue"] {
+    font-size: 20px !important; color: #1DC9A4 !important; font-weight: 700 !important;
+}
+
 .stProgress > div > div { background: #1DC9A4 !important; }
 .stAlert, .stSuccess, .stError, .stInfo { background: #0F2133 !important; border-color: #1E3148 !important; color: #C0D0E0 !important; border-radius: 8px !important; }
-.stTabs [data-baseweb="tab-list"] { background: transparent !important; border-bottom: 1px solid #1E3148 !important; }
-.stTabs [data-baseweb="tab"] { color: #5A8FAA !important; font-size: 13px !important; background: transparent !important; border-radius: 6px 6px 0 0 !important; }
-.stTabs [aria-selected="true"] { color: #1DC9A4 !important; border-bottom: 2px solid #1DC9A4 !important; background: #0F2133 !important; }
+
+/* ── UPDATED: Tab bar ── */
+.stTabs [data-baseweb="tab-list"] {
+    background: #0F2133 !important; border-radius: 8px 8px 0 0 !important;
+    padding: 4px 4px 0 !important; border-bottom: 1px solid #1E3148 !important; gap: 3px !important;
+}
+.stTabs [data-baseweb="tab"] {
+    color: #5A8FAA !important; font-size: 13px !important; background: transparent !important;
+    border-radius: 6px 6px 0 0 !important; padding: 7px 16px !important;
+}
+.stTabs [aria-selected="true"] {
+    color: #1DC9A4 !important; box-shadow: inset 0 -2px 0 #1DC9A4 !important;
+    background: #162F47 !important;
+}
+.stTabs [data-baseweb="tab"]:hover {
+    color: #C0D0E0 !important; background: #1A3050 !important;
+}
 .stTabs [data-baseweb="tab-panel"] { background: #0D1B2A !important; padding-top: 16px !important; }
+
 .streamlit-expanderHeader { background: #0F2133 !important; color: #C0D0E0 !important; border-radius: 8px !important; border: 1px solid #1E3148 !important; }
 .gold-header { background: #1A1A18; color: #D4B07A; padding: 5px 14px; border-radius: 6px; font-size: 12px; font-weight: 600; margin: 16px 0 8px; display: inline-block; }
 .flag-warn   { background:#1C1408; border-left:3px solid #D4A054; padding:10px 14px; border-radius:0 6px 6px 0; margin:6px 0; }
@@ -523,7 +545,7 @@ CRITICAL EXTRACTION RULES:
 
 13. MANAGEMENT: Fee % of EGI, annual $, per-unit, current and proposed manager names.
 
-14. REPLACEMENT COST: Extract the full table if present. Fields: land_per_unit, land_total, 
+14. REPLACEMENT COST: Extract the full table if present. Fields: land_per_unit, land_total,
     hard_cost_per_sf, hard_cost_per_unit, hard_cost_total, soft_cost_pct, soft_cost_per_unit, soft_cost_total,
     direct_replacement_per_unit, direct_replacement_per_sf, direct_replacement_total,
     developer_fee_pct, developer_fee_per_unit, developer_fee_total,
@@ -537,7 +559,7 @@ CRITICAL EXTRACTION RULES:
 
 16. Extract every number that exists anywhere in the OM. Do not skip any table or data page.
 
-17. INVESTMENT HIGHLIGHTS: Extract the 6-10 bullet-point highlights from the executive summary / investment profile 
+17. INVESTMENT HIGHLIGHTS: Extract the 6-10 bullet-point highlights from the executive summary / investment profile
     into investment_highlights as an array of strings. These are the broker's key selling points.
 
 18. CONCESSION BURNOFF: If the OM contains a concession burn-off analysis or timeline, extract:
@@ -654,8 +676,6 @@ def _v(val, fmt=None, suffix="", default="N/A"):
     return f"{val}{suffix}"
 
 def _pct(val, suffix="", default="N/A"):
-    """Format a percentage that may be stored as decimal (0.0464) or whole (4.64).
-    Rule: if abs(val) <= 2.0, treat as decimal proportion and multiply by 100."""
     if val is None or val == "": return default
     try:
         f = float(val)
@@ -668,7 +688,6 @@ def _pct(val, suffix="", default="N/A"):
         return s if s.endswith("%") else f"{s}%"
 
 def _psf(val):
-    """Safe PSF formatter — returns '—' for None/zero/non-numeric."""
     if val is None or val == "" or val == "N/A": return "—"
     try:
         f = float(val)
@@ -676,34 +695,32 @@ def _psf(val):
     except: return "—"
 
 def _is_num(v):
-    """Return True only if v is a real number (not None, '', 'N/A', 'n/a')."""
     if v is None or str(v).strip().lower() in ("", "n/a", "na", "—", "-"): return False
     try: float(str(v).replace("$","").replace(",","")); return True
     except: return False
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# SECTION 3 — EXCEL REPORT GENERATOR  (3-tab, RealVal color palette)
+# SECTION 3 — EXCEL REPORT GENERATOR
 # ══════════════════════════════════════════════════════════════════════════════
 
-# ── Exact RealVal colors (resolved from template XML) ────────────────────────
-C_HDR      = "FF44546A"   # Dark slate blue  — section headers
-C_HDR2     = "FF2C3644"   # Darker slate     — cover subtitle / totals
-C_HDR3     = "FF295781"   # Dark navy        — NOI / key totals
-C_SUB_HDR  = "FFD3D3D3"   # Light gray       — table headers / subsections
-C_HDR_TEXT = "FFE7E6E6"   # Near-white       — text on dark backgrounds
-C_AMBER    = "FFFFC000"   # Amber            — text on NOI rows
-C_BLUE_IN  = "FF0070C0"   # Input blue       — data values
-C_LABEL    = "FF44546A"   # Slate            — label text
-C_BODY     = "FF3E3E3E"   # Dark gray        — body text
+C_HDR      = "FF44546A"
+C_HDR2     = "FF2C3644"
+C_HDR3     = "FF295781"
+C_SUB_HDR  = "FFD3D3D3"
+C_HDR_TEXT = "FFE7E6E6"
+C_AMBER    = "FFFFC000"
+C_BLUE_IN  = "FF0070C0"
+C_LABEL    = "FF44546A"
+C_BODY     = "FF3E3E3E"
 C_WHITE    = "FFFFFFFF"
-C_ALT      = "FFEBF0F7"   # Pale blue-gray   — alternating rows
-C_SUBTOTAL = "FFDDEBF7"   # Light blue       — subtotal rows
-C_WARN     = "FFFFF2CC"   # Yellow           — Warning flags
-C_GREEN_L  = "FFD0F0D8"   # Green            — Opportunity flags
-C_BLUE_L   = "FFBED2E6"   # Blue             — Info flags
-C_PURPLE_L = "FFF4CCCC"   # Pink             — Verify flags
-C_BORDER   = "FFB7B7B7"   # Border color
+C_ALT      = "FFEBF0F7"
+C_SUBTOTAL = "FFDDEBF7"
+C_WARN     = "FFFFF2CC"
+C_GREEN_L  = "FFD0F0D8"
+C_BLUE_L   = "FFBED2E6"
+C_PURPLE_L = "FFF4CCCC"
+C_BORDER   = "FFB7B7B7"
 
 
 def _fill(c): return PatternFill("solid", fgColor=c)
@@ -800,7 +817,6 @@ def _cover(ws, row, line1, line2, n=14):
 
 
 def build_excel(d: dict, filename: str, sections: dict = None) -> bytes:
-    # Default all sections on if not provided
     S = sections or {}
     def _on(key): return S.get(key, True)
     date   = datetime.today().strftime("%B %d, %Y")
@@ -833,12 +849,8 @@ def build_excel(d: dict, filename: str, sections: dict = None) -> bytes:
     wb = Workbook()
     wb.remove(wb.active)
 
-    # ══════════════════════════════════════════════════════════════════════════
-    # TAB 1 — FINANCIALS
-    # ══════════════════════════════════════════════════════════════════════════
     ws1 = wb.create_sheet("Financials")
     ws1.sheet_view.showGridLines = False
-    # Column widths scale with number of financial periods (up to 7)
     _n_periods = len((d.get("financials") or {}).get("periods") or [])
     _data_w = 14 if _n_periods >= 6 else (16 if _n_periods >= 4 else 18)
     _notes_w = 30 if _n_periods >= 6 else 36
@@ -857,7 +869,6 @@ def build_excel(d: dict, filename: str, sections: dict = None) -> bytes:
     r = _cover(ws1, r, f"MULTIFAMILY UNDERWRITING REPORT  ·  FINANCIALS", subtitle)
 
     if _on('deal'):
-        # ── A. Deal Summary ───────────────────────────────────────────────────────
         r = _sec(ws1, r, "A.  DEAL SUMMARY & PROPERTY DETAILS")
         agents = ", ".join(
             a.get("name", str(a)) if isinstance(a, dict) else str(a)
@@ -882,7 +893,6 @@ def build_excel(d: dict, filename: str, sections: dict = None) -> bytes:
         r = _sp(ws1, r)
 
     if _on('unitmix'):
-        # ── B. Unit Mix ───────────────────────────────────────────────────────────
         r = _sec(ws1, r, "B.  UNIT MIX")
         if umix:
             r = _thdr(ws1, r, ["Unit Type","Plan","Units","Mix %","SF / Unit",
@@ -900,14 +910,13 @@ def build_excel(d: dict, filename: str, sections: dict = None) -> bytes:
             r = _kv(ws1, r, "Note", "No unit mix data found.")
         r = _sp(ws1, r)
 
-        # ── C. Operating Statement ────────────────────────────────────────────────
         periods   = fin.get("periods") or []
     if _on('opstat'):
         inc_lines = fin.get("income_lines") or []
         exp_lines = fin.get("expense_lines") or []
 
         if periods and (inc_lines or exp_lines):
-            p_all = periods[:7]  # support up to 7 columns (e.g. F-3/Current/2ndGen + Year2-5)
+            p_all = periods[:7]
             r = _sec(ws1, r, f"C.  OPERATING STATEMENT  ({'  ·  '.join(p_all)})")
             r = _thdr(ws1, r, ["Line Item"] + p_all + ["Underwriting Notes"])
             f6 = ["left"] + ["right"] * len(p_all) + ["left"]
@@ -918,7 +927,6 @@ def build_excel(d: dict, filename: str, sections: dict = None) -> bytes:
                     _v(vals.get(p), "$") if vals.get(p) is not None else "—" for p in p_all
                 ] + [item.get("note") or ""]
 
-            # Track which total rows were already rendered inline to avoid duplicates
             rendered_totals = set()
 
             r = _shdr(ws1, r, "INCOME")
@@ -926,7 +934,6 @@ def build_excel(d: dict, filename: str, sections: dict = None) -> bytes:
                 name = (item.get("item") or "").lower()
                 if item.get("is_total"):
                     rendered_totals.add(name)
-                    # "NOI before reserves" rows render as subtotal (light blue), not amber NOI
                     if "before reserve" in name or "pre reserve" in name:
                         r = _subtrow(ws1, r, _fin_row(item))
                     else:
@@ -941,7 +948,6 @@ def build_excel(d: dict, filename: str, sections: dict = None) -> bytes:
                 name = (item.get("item") or "").lower()
                 if item.get("is_total"):
                     rendered_totals.add(name)
-                    # "Total expenses pre reserve" / "NOI before reserves" → subtotal
                     if "before reserve" in name or "pre reserve" in name:
                         r = _subtrow(ws1, r, _fin_row(item))
                     else:
@@ -951,7 +957,6 @@ def build_excel(d: dict, filename: str, sections: dict = None) -> bytes:
                 else:
                     r = _drow(ws1, r, _fin_row(item), alt=bool(i % 2), als=f6)
 
-            # NOI — only render from fin.noi dict if not already rendered inline
             noi_d = fin.get("noi") or {}
             noi_already = any("net operating income" in t for t in rendered_totals)
             if not noi_already and any(_is_num(noi_d.get(p)) for p in p_all):
@@ -959,14 +964,12 @@ def build_excel(d: dict, filename: str, sections: dict = None) -> bytes:
                     _v(noi_d.get(p), "$") if _is_num(noi_d.get(p)) else "—" for p in p_all
                 ] + [""])
 
-            # Capital reserves — only if numeric
             capex_d = fin.get("capex") or {}
             if any(_is_num(capex_d.get(p)) for p in p_all):
                 r = _drow(ws1, r, ["  Capital Reserves"] + [
                     _v(capex_d.get(p), "$") if _is_num(capex_d.get(p)) else "—" for p in p_all
                 ] + [""], als=f6)
 
-            # CFFO — only render if numeric values exist (guards against Mosby's "N/A" string)
             cffo_d = fin.get("cffo") or {}
             if any(_is_num(cffo_d.get(p)) for p in p_all):
                 r = _noirow(ws1, r, ["CASH FLOW FROM OPERATIONS"] + [
@@ -978,7 +981,6 @@ def build_excel(d: dict, filename: str, sections: dict = None) -> bytes:
         r = _sp(ws1, r)
     if _on('valueadd'):
 
-        # ── D. Value-Add ──────────────────────────────────────────────────────────
         r = _sec(ws1, r, "D.  PROPOSED VALUE-ADD BY FLOOR PLAN")
         plans = va.get("by_floor_plan") or []
         if plans:
@@ -993,7 +995,6 @@ def build_excel(d: dict, filename: str, sections: dict = None) -> bytes:
                     _v(p.get("post_rehab_rent"),"$"), _psf(p.get('post_rehab_psf')),
                 ], alt=bool(i % 2), als=ra2)
 
-        # renovation tiers
         tiers = inv.get("renovation_tiers") or []
         if tiers:
             r = _sp(ws1, r)
@@ -1007,7 +1008,6 @@ def build_excel(d: dict, filename: str, sections: dict = None) -> bytes:
                     _v(t.get("premium"),"$") if t.get("premium") else "—",
                 ], alt=bool(i % 2))
 
-        # light upgrade items
         light = inv.get("light_upgrade_items") or va.get("light_upgrade_items") or []
         if light:
             r = _sp(ws1, r)
@@ -1031,7 +1031,6 @@ def build_excel(d: dict, filename: str, sections: dict = None) -> bytes:
         ]):
             r = _kv(ws1, r, k, v, alt=bool(i % 2))
 
-        # ── Revenue Upside Levers ─────────────────────────────────────────────────
         levers = d.get("value_add_levers") or []
         if levers:
             r = _sp(ws1, r)
@@ -1064,7 +1063,6 @@ def build_excel(d: dict, filename: str, sections: dict = None) -> bytes:
         r = _sp(ws1, r)
     if _on('financing'):
 
-        # ── E. Financing ──────────────────────────────────────────────────────────
         r = _sec(ws1, r, "E.  FINANCING & DEBT TERMS")
         r = _shdr(ws1, r, "Offering & Contact")
         for i, (k, v) in enumerate([
@@ -1125,7 +1123,6 @@ def build_excel(d: dict, filename: str, sections: dict = None) -> bytes:
         r = _sp(ws1, r)
     if _on('flags'):
 
-        # ── F. Underwriting Flags ─────────────────────────────────────────────────
         r = _sec(ws1, r, "F.  UNDERWRITING FLAGS")
         flag_bg = {"Warning": C_WARN, "Opportunity": C_GREEN_L, "Info": C_BLUE_L, "Verify": C_PURPLE_L}
         if flags:
@@ -1144,7 +1141,6 @@ def build_excel(d: dict, filename: str, sections: dict = None) -> bytes:
         r = _sp(ws1, r)
     if _on('tax'):
 
-        # ── G. Tax ────────────────────────────────────────────────────────────────
         r = _sec(ws1, r, "G.  PROPERTY TAX & TAX ABATEMENT")
         r = _shdr(ws1, r, "Property Tax Detail")
         for i, (k, v) in enumerate([
@@ -1173,10 +1169,8 @@ def build_excel(d: dict, filename: str, sections: dict = None) -> bytes:
         r = _sp(ws1, r)
     if _on('repl'):
 
-        # ── H. Replacement Cost / Insurance / Management ──────────────────────────
         r = _sec(ws1, r, "H.  REPLACEMENT COST  ·  INSURANCE  ·  MANAGEMENT")
         r = _shdr(ws1, r, "Replacement Cost")
-        # If detailed breakdown exists (Grand Preserve style), render full table
         has_detail = any(repl.get(k) for k in ["hard_cost_per_sf","land_per_unit","gross_replacement_per_unit"])
         if has_detail:
             repl_rows = [
@@ -1234,15 +1228,11 @@ def build_excel(d: dict, filename: str, sections: dict = None) -> bytes:
             r = _kv(ws1, r, k, v, alt=bool(i % 2))
         r = _sp(ws1, r)
 
-        # Disclaimer
         _fr(ws1, r, 14, C_ALT)
         _sc(ws1, r, 1, "AI-generated from broker OM. Internal use only. Verify all figures independently. Powered by Anthropic Claude.",
             bg=C_ALT, fg="FF888880", size=8, italic=True)
         ws1.row_dimensions[r].height = 13
 
-        # ══════════════════════════════════════════════════════════════════════════
-    # TAB 2 — COMPARABLES
-    # ══════════════════════════════════════════════════════════════════════════
     ws2 = wb.create_sheet("Comparables")
     ws2.sheet_view.showGridLines = False
     for col, w in {"A":30,"B":14,"C":10,"D":10,"E":10,"F":12,
@@ -1252,10 +1242,8 @@ def build_excel(d: dict, filename: str, sections: dict = None) -> bytes:
     r = 1
     r = _cover(ws2, r, f"COMPARABLES — RENT & SALE  |  {prop}", subtitle, n=11)
 
-    # ── Comp subject baseline: avg eff_rent across all unit mix rows ──────────
     ra_c = ["left","center","center","center","center","center","right","right","right","right","left"]
     def _subj_rent_for(comp_type):
-        """Return avg effective rent for matching unit type, or overall avg."""
         ct = (comp_type or "").lower()
         matching = [u for u in umix if ct in (u.get("plan") or u.get("type") or "").lower()]
         pool = matching if matching else umix
@@ -1289,18 +1277,15 @@ def build_excel(d: dict, filename: str, sections: dict = None) -> bytes:
         return r
 
     if _on('rentcomps'):
-        # ── A. Garden Rent Comps ──────────────────────────────────────────────────
         if rg:
             r = _render_comp_group(ws2, r, rg, "A.  GARDEN RENT COMPARABLES", "Garden")
 
     if _on('rentcomps'):
-        # ── B. Townhouse Rent Comps ───────────────────────────────────────────────
         if rth:
             sec_letter = "B" if rg else "A"
             r = _render_comp_group(ws2, r, rth, f"{sec_letter}.  TOWNHOUSE RENT COMPARABLES", "Townhouse")
 
     if _on('rentcomps'):
-        # ── C. Full Comp Detail (covers Mosby-style OMs with only rcomps) ─────────
         if rcomps:
             sec_full = "A" if (not rg and not rth) else ("C" if (rg and rth) else "B")
             r = _sec(ws2, r, f"{sec_full}.  FULL COMPARABLE DETAIL", n=11)
@@ -1323,7 +1308,6 @@ def build_excel(d: dict, filename: str, sections: dict = None) -> bytes:
             r = _sp(ws2, r)
 
     if _on('salecomps'):
-        # ── D. Sale Comps ─────────────────────────────────────────────────────────
         r = _sec(ws2, r, "D.  SALE COMPARABLES", n=11)
         if scomps:
             r = _thdr(ws2, r, ["Property","Date","Yr Built","Units","Sale Price",
@@ -1344,15 +1328,11 @@ def build_excel(d: dict, filename: str, sections: dict = None) -> bytes:
             ws2.row_dimensions[r].height = 20; r += 1
         r = _sp(ws2, r)
 
-    # Disclaimer
     _fr(ws2, r, 11, C_ALT)
     _sc(ws2, r, 1, "AI-generated. Internal use only. Verify all figures independently. Powered by Anthropic Claude.",
         bg=C_ALT, fg="FF888880", size=8, italic=True)
     ws2.row_dimensions[r].height = 13
 
-    # ══════════════════════════════════════════════════════════════════════════
-    # TAB 3 — DEMOGRAPHICS
-    # ══════════════════════════════════════════════════════════════════════════
     ws3 = wb.create_sheet("Demographics")
     ws3.sheet_view.showGridLines = False
     for col, w in {"A":36,"B":20,"C":20,"D":20,"E":14,"F":42}.items():
@@ -1362,7 +1342,6 @@ def build_excel(d: dict, filename: str, sections: dict = None) -> bytes:
     r = _cover(ws3, r, f"DEMOGRAPHICS & MARKET OVERVIEW  |  {prop}", subtitle, n=6)
 
     if _on('addinc'):
-        # ── A. Additional Income ──────────────────────────────────────────────────
         add_inc = inv.get("additional_income") or []
         if add_inc:
             r = _sec(ws3, r, "A.  ADDITIONAL INCOME", n=6)
@@ -1382,7 +1361,6 @@ def build_excel(d: dict, filename: str, sections: dict = None) -> bytes:
             r = _sp(ws3, r)
 
     if _on('utilities'):
-        # ── B. Utilities ──────────────────────────────────────────────────────────
         r = _sec(ws3, r, "B.  UTILITY INFORMATION", n=6)
         if utils_:
             r = _thdr(ws3, r, ["Utility","Billing Method","Paid By","Reimbursement","Annual Income","Notes"], n=6)
@@ -1397,7 +1375,6 @@ def build_excel(d: dict, filename: str, sections: dict = None) -> bytes:
         r = _sp(ws3, r)
 
     if _on('pop'):
-        # ── C. Population & Income ────────────────────────────────────────────────
         r = _sec(ws3, r, "C.  POPULATION & INCOME DEMOGRAPHICS", n=6)
         has_demo = any(demo.get(k) for k in ["pop_1mi","pop_3mi","pop_5mi","median_income_3mi"])
         if not has_demo:
@@ -1431,7 +1408,6 @@ def build_excel(d: dict, filename: str, sections: dict = None) -> bytes:
         r = _sp(ws3, r)
 
     if _on('afford'):
-        # ── D. Affordability ──────────────────────────────────────────────────────
         r = _sec(ws3, r, "D.  AFFORDABILITY & RENT GROWTH RUNWAY", n=6)
         r = _thdr(ws3, r, ["Metric","2025 (3-Mile)","2030 Proj. (3-Mile)","Notes"], n=6)
         for i, (metric, v25, v30, note) in enumerate([
@@ -1453,7 +1429,6 @@ def build_excel(d: dict, filename: str, sections: dict = None) -> bytes:
         r = _sp(ws3, r)
 
     if _on('schools'):
-        # ── E. Schools & Crime ────────────────────────────────────────────────────
         r = _sec(ws3, r, "E.  SCHOOLS, CRIME & QUALITY OF LIFE", n=6)
         r = _shdr(ws3, r, "Assigned Schools  (source: greatschools.org)", n=6)
         for i, (k, v) in enumerate([
@@ -1468,7 +1443,6 @@ def build_excel(d: dict, filename: str, sections: dict = None) -> bytes:
         r = _sp(ws3, r)
 
     if _on('utilities'):
-        # ── F. Site Info ──────────────────────────────────────────────────────────
         r = _sec(ws3, r, "F.  SITE & CONSTRUCTION INFORMATION", n=6)
         r = _shdr(ws3, r, "Physical Plant", n=6)
         for i, (k, v) in enumerate([
@@ -1497,7 +1471,6 @@ def build_excel(d: dict, filename: str, sections: dict = None) -> bytes:
         r = _sp(ws3, r)
 
     if _on('employers'):
-        # ── G. Major Employers ────────────────────────────────────────────────────
         employers = demo.get("employers") or []
         r = _sec(ws3, r, "G.  MAJOR EMPLOYERS & ECONOMIC DRIVERS", n=6)
         if employers and any(e.get("name") for e in employers):
@@ -1513,7 +1486,6 @@ def build_excel(d: dict, filename: str, sections: dict = None) -> bytes:
         r = _sp(ws3, r)
 
     if _on('market'):
-        # ── H. Market & Submarket Overview ────────────────────────────────────────
         r = _sec(ws3, r, "H.  MARKET & SUBMARKET OVERVIEW", n=6)
         if mkt.get("market_summary"):
             r = _shdr(ws3, r, "Market Narrative", n=6)
@@ -1533,7 +1505,6 @@ def build_excel(d: dict, filename: str, sections: dict = None) -> bytes:
             if v: r = _kv(ws3, r, k, v, alt=bool(i % 2), n=6)
 
     if _on('market'):
-        # ── I. Supply & Demand ────────────────────────────────────────────────────
         r = _sp(ws3, r)
         r = _sec(ws3, r, "I.  SUPPLY & DEMAND", n=6)
         r = _thdr(ws3, r, ["Metric","Value","Notes"], n=6)
@@ -1568,7 +1539,6 @@ def build_excel(d: dict, filename: str, sections: dict = None) -> bytes:
                     ], alt=bool(i % 2), als=["left","left","right","center","left"], h=25, n=6)
         r = _sp(ws3, r)
 
-    # Disclaimer
     _fr(ws3, r, 6, C_ALT)
     _sc(ws3, r, 1, "AI-generated. Internal use only. Verify all figures independently. Powered by Anthropic Claude.",
         bg=C_ALT, fg="FF888880", size=8, italic=True)
@@ -1580,12 +1550,11 @@ def build_excel(d: dict, filename: str, sections: dict = None) -> bytes:
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# ══════════════════════════════════════════════════════════════════════════════
 # SECTION 4 — STREAMLIT UI
 # ══════════════════════════════════════════════════════════════════════════════
 
 with st.sidebar:
-    pass  # hidden via CSS
+    pass
 
 st.markdown("""
 <div class="rv-navbar">
@@ -1605,8 +1574,6 @@ st.markdown("""
 
 main_col, right_col = st.columns([2.2, 1], gap="small")
 
-
-# ── Select All / Deselect All handled BEFORE columns ─────────────────────────
 _keys = ["deal","unitmix","opstat","valueadd","financing","flags","tax","repl",
          "rentcomps","addinc2","salecomps","addinc","utilities","pop","afford",
          "schools","employers","market"]
@@ -1614,7 +1581,6 @@ for k in _keys:
     if "sel_"+k not in st.session_state:
         st.session_state["sel_"+k] = True
 
-# Callbacks defined at module level — safe to call from any context
 def _cb_selall():
     for k in _keys:
         st.session_state["sel_"+k] = True
@@ -1657,7 +1623,6 @@ with right_col:
     _n_sel = sum(st.session_state.get("sel_"+k, True) for k in _keys)
     st.markdown(f'<div class="rvdiv"></div><div class="rvcnt">{_n_sel} / 18 selected</div>', unsafe_allow_html=True)
 
-    # Use on_change callbacks — fires before rerun, no st.rerun() needed
     st.button("✓  Select All",  key="btn_sel", use_container_width=True, on_click=_cb_selall)
     st.button("✕  Deselect All", key="btn_des", use_container_width=True, on_click=_cb_desall)
 
@@ -1671,7 +1636,6 @@ with right_col:
 <div class="rvmeta">Output: <span>3-tab Excel (.xlsx)</span></div>
 """, unsafe_allow_html=True)
 
-# Read values after right_col for use in main_col
 sel_deal=st.session_state["sel_deal"]; sel_unitmix=st.session_state["sel_unitmix"]
 sel_opstat=st.session_state["sel_opstat"]; sel_valueadd=st.session_state["sel_valueadd"]
 sel_financing=st.session_state["sel_financing"]; sel_flags=st.session_state["sel_flags"]
@@ -1706,7 +1670,6 @@ with main_col:
         st.stop()
     os.environ["ANTHROPIC_API_KEY"] = api_key
 
-    # Pad the uploader to align with the upload card above
     _gap, _upload_col = st.columns([0.058, 0.942])
     with _upload_col:
         uploaded = st.file_uploader("Drop your OM PDF here", type=["pdf"], label_visibility="collapsed")
