@@ -11,7 +11,6 @@ def init_supabase():
 def login_page():
     st.markdown("""
 <style>
-/* ── Reset & base ── */
 #MainMenu, footer, header { visibility: hidden; }
 html, body, [class*="css"], .stApp, .main {
     background-color: #0A1628 !important;
@@ -22,87 +21,84 @@ html, body, [class*="css"], .stApp, .main {
     max-width: 100% !important;
     background: #0A1628 !important;
 }
-
-/* ── Top navbar ── */
+/* Navbar */
 .om-navbar {
     background: #0B1929;
     border-bottom: 1px solid #1E3148;
     padding: 0 48px;
-    height: 110px;
+    height: 100px;
     display: flex;
     align-items: center;
     justify-content: space-between;
+    width: 100%;
+    box-sizing: border-box;
 }
-.om-nav-left { display: flex; align-items: center; gap: 18px; }
+.om-nav-left { display: flex; align-items: center; gap: 16px; }
 .om-nav-icon {
-    width: 64px; height: 64px;
-    background: #1DC9A4; border-radius: 16px;
+    width: 58px; height: 58px;
+    background: #1DC9A4; border-radius: 14px;
     display: flex; align-items: center; justify-content: center;
-    font-weight: 800; font-size: 22px; color: #0D1B2A;
-    flex-shrink: 0;
+    font-weight: 800; font-size: 20px; color: #0D1B2A;
 }
-.om-nav-title { font-size: 26px; font-weight: 700; color: #FFFFFF; line-height: 1.2; }
+.om-nav-title { font-size: 24px; font-weight: 700; color: #FFFFFF; line-height: 1.2; }
 .om-nav-sub {
-    font-size: 11px; font-weight: 500; color: #5A8FAA;
-    letter-spacing: 0.14em; text-transform: uppercase; margin-top: 4px;
+    font-size: 10px; color: #5A8FAA;
+    letter-spacing: 0.14em; text-transform: uppercase; margin-top: 3px;
 }
 .om-secure-badge {
     border: 1.5px solid #1DC9A4; color: #1DC9A4;
-    border-radius: 20px; padding: 7px 20px;
+    border-radius: 20px; padding: 6px 18px;
     font-size: 11px; font-weight: 700; letter-spacing: 0.1em;
     text-transform: uppercase;
 }
-
-/* ── Card top ── */
+/* Card */
 .om-card-top {
     background: #0F1E30;
     border: 1px solid #1A3250;
     border-radius: 16px 16px 0 0;
-    padding: 36px 40px 28px;
+    padding: 32px 36px 24px;
     text-align: center;
-    margin-top: 60px;
+    margin-top: 56px;
 }
 .om-card-icon {
-    width: 64px; height: 64px;
-    background: #1DC9A4; border-radius: 16px;
+    width: 60px; height: 60px;
+    background: #1DC9A4; border-radius: 14px;
     display: inline-flex; align-items: center; justify-content: center;
-    font-weight: 800; font-size: 22px; color: #0D1B2A;
-    margin-bottom: 16px;
+    font-weight: 800; font-size: 20px; color: #0D1B2A;
+    margin-bottom: 14px;
 }
-.om-card-title { font-size: 22px; font-weight: 700; color: #FFFFFF; margin-bottom: 6px; }
+.om-card-title { font-size: 21px; font-weight: 700; color: #FFFFFF; margin-bottom: 5px; }
 .om-card-sub { font-size: 13px; color: #5A8FAA; }
-
-/* ── Form wrap ── */
 .om-form-wrap {
     background: #0A1628;
     border: 1px solid #1A3250;
     border-top: none;
     border-radius: 0 0 16px 16px;
-    padding: 28px 40px 32px;
+    padding: 24px 36px 28px;
 }
-
-/* ── Input overrides ── */
+/* Input fields */
 .stTextInput > div > div > input {
     background: #0F1E30 !important;
     border: 1px solid #1E3A55 !important;
     border-radius: 10px !important;
     color: #E0E6EF !important;
     font-size: 14px !important;
-    padding: 12px 16px !important;
-    height: 48px !important;
+    padding: 12px 14px !important;
+    height: 46px !important;
 }
 .stTextInput > div > div > input::placeholder { color: #3A6080 !important; }
 .stTextInput > div > div > input:focus {
     border-color: #1DC9A4 !important;
     box-shadow: 0 0 0 2px rgba(29,201,164,0.15) !important;
+    outline: none !important;
 }
 .stTextInput label {
     color: #7A9AB8 !important;
     font-size: 13px !important;
     font-weight: 500 !important;
+    margin-bottom: 2px !important;
 }
-
-/* ── Sign In button ── */
+/* Button */
 .stButton > button {
     background: #1DC9A4 !important;
     color: #0D1B2A !important;
@@ -110,14 +106,13 @@ html, body, [class*="css"], .stApp, .main {
     border-radius: 10px !important;
     font-weight: 700 !important;
     font-size: 15px !important;
-    padding: 13px 0 !important;
+    padding: 12px 0 !important;
     width: 100% !important;
-    margin-top: 6px !important;
-    letter-spacing: 0.02em !important;
+    margin-top: 4px !important;
 }
 .stButton > button:hover { background: #18B090 !important; }
-
-.stAlert {
+/* Alerts */
+div[data-testid="stAlert"] {
     background: #0F2133 !important;
     border-color: #1E3148 !important;
     color: #C0D0E0 !important;
@@ -140,9 +135,9 @@ html, body, [class*="css"], .stApp, .main {
 </div>
 """, unsafe_allow_html=True)
 
-    # ── Card top (pure HTML, centered via columns) ──
-    _, center, _ = st.columns([1, 1.6, 1])
-    with center:
+    # ── Centered login card ──
+    _, col, _ = st.columns([1, 1.4, 1])
+    with col:
         st.markdown("""
 <div class="om-card-top">
   <div class="om-card-icon">OM</div>
@@ -152,13 +147,10 @@ html, body, [class*="css"], .stApp, .main {
 <div class="om-form-wrap">
 """, unsafe_allow_html=True)
 
-        email    = st.text_input("Email", placeholder="analyst@yourfirm.com",
-                                 key="login_email", label_visibility="visible")
-        password = st.text_input("Password", type="password",
-                                 placeholder="Enter password...",
-                                 key="login_password", label_visibility="visible")
+        email    = st.text_input("Email", placeholder="analyst@yourfirm.com", key="login_email")
+        password = st.text_input("Password", type="password", placeholder="Enter password...", key="login_password")
 
-        st.markdown("<div style='height:4px'></div>", unsafe_allow_html=True)
+        st.markdown("<div style='height:2px'></div>", unsafe_allow_html=True)
 
         if st.button("Sign In →", use_container_width=True, key="login_btn"):
             if not email or not password:
@@ -177,8 +169,8 @@ html, body, [class*="css"], .stApp, .main {
                     st.error("Invalid email or password. Contact your administrator for access.")
 
         st.markdown("""
-<div style="margin-top:20px; padding-top:16px; border-top:1px solid #1A3250;
-            text-align:center; font-size:11px; color:#2A4A60; line-height:1.8;">
+<div style="margin-top:18px; padding-top:14px; border-top:1px solid #1A3250;
+            text-align:center; font-size:11px; color:#2A4A60; line-height:1.9;">
   Access is by invitation only.<br>
   Contact your administrator to request access.
 </div>
