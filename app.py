@@ -9,6 +9,15 @@ from openpyxl.utils import get_column_letter
 
 st.set_page_config(page_title="OM Analyzer", page_icon="🏢", layout="wide")
 
+# ══════════════════════════════════════════════════════════════════════════════
+# AUTH GATE — must come right after set_page_config
+# ══════════════════════════════════════════════════════════════════════════════
+from auth import login_page, logout
+if "user" not in st.session_state:
+    login_page()
+    st.stop()
+# ══════════════════════════════════════════════════════════════════════════════
+
 st.markdown("""
 <style>
 #MainMenu, footer, header {visibility: hidden;}
@@ -1590,6 +1599,22 @@ def _cb_desall():
         st.session_state["sel_"+k] = False
 
 with right_col:
+    # ── Logged-in user + Sign Out ──────────────────────────────────────────
+    _user_email = ""
+    if st.session_state.get("user"):
+        try:
+            _user_email = st.session_state["user"].email or ""
+        except Exception:
+            _user_email = ""
+    st.markdown(
+        f'<div class="rvmeta" style="margin-bottom:2px;">🔐 <span>{_user_email}</span></div>',
+        unsafe_allow_html=True
+    )
+    if st.button("Sign Out", use_container_width=True, key="btn_signout"):
+        logout()
+    st.markdown('<div class="rvdiv"></div>', unsafe_allow_html=True)
+    # ──────────────────────────────────────────────────────────────────────
+
     st.markdown('<div class="rvph" style="margin-top:0;">What\'s in the Report</div>', unsafe_allow_html=True)
     st.markdown('<div class="rvph2">Tab 1 — Financials</div>', unsafe_allow_html=True)
     def _cb(key, label):
