@@ -112,36 +112,72 @@ section[data-testid="stSidebar"] { display: none !important; }
     margin-right: -5rem !important;
     min-height: auto !important;
 }
-/* ── Checkboxes ── */
+/* ── Checkboxes — always visible; yellow fill when selected ── */
 [data-testid="stCheckbox"] {
     background: transparent !important;
     background-color: transparent !important;
     padding: 2px 0 3px !important;
 }
-[data-testid="stCheckbox"] label,
-[data-testid="stCheckbox"] label * {
-    background: transparent !important;
-    background-color: transparent !important;
-}
 [data-testid="stCheckbox"] label {
     gap: 8px !important;
     align-items: flex-start !important;
+    background: transparent !important;
+    background-color: transparent !important;
 }
 [data-testid="stCheckbox"] label p,
-[data-testid="stCheckbox"] label span,
-[data-testid="stCheckbox"] label div {
+[data-testid="stCheckbox"] label div[data-testid="stMarkdownContainer"],
+[data-testid="stCheckbox"] label div[data-testid="stMarkdownContainer"] * {
     font-size: 12px !important;
     color: #5A8FAA !important;
     line-height: 1.4 !important;
     background: transparent !important;
     background-color: transparent !important;
 }
-[data-testid="stCheckbox"] input:checked ~ div,
-[data-testid="stCheckbox"] input:checked + div {
-    background-color: #FFC000 !important;
-    border-color: #FFC000 !important;
+
+/* Native checkbox fallback: works when Streamlit exposes the input directly */
+[data-testid="stCheckbox"] input[type="checkbox"] {
+    opacity: 1 !important;
+    width: 18px !important;
+    height: 18px !important;
+    min-width: 18px !important;
+    min-height: 18px !important;
+    margin: 0 !important;
+    cursor: pointer !important;
+    appearance: none !important;
+    -webkit-appearance: none !important;
+    background-color: transparent !important;
+    border: 1.5px solid #FFC000 !important;
+    border-radius: 4px !important;
+    box-shadow: 0 0 0 1px rgba(255, 192, 0, 0.18) !important;
 }
-[data-testid="stCheckbox"] svg { color: #0D1B2A !important; }
+[data-testid="stCheckbox"] input[type="checkbox"]:checked {
+    background-color: #FFD84D !important;
+    border-color: #FFD84D !important;
+    box-shadow: 0 0 0 1px rgba(255, 216, 77, 0.35) !important;
+}
+
+/* Streamlit/BaseWeb custom checkbox fallback: keeps unchecked boxes visible */
+[data-testid="stCheckbox"] label > div:first-child,
+[data-testid="stCheckbox"] label span:first-child,
+[data-testid="stCheckbox"] label div[role="checkbox"] {
+    background-color: transparent !important;
+    border: 1.5px solid #FFC000 !important;
+    border-radius: 4px !important;
+    opacity: 1 !important;
+}
+[data-testid="stCheckbox"] input[type="checkbox"]:checked + div,
+[data-testid="stCheckbox"] input[type="checkbox"]:checked ~ div,
+[data-testid="stCheckbox"] input[type="checkbox"]:checked + span,
+[data-testid="stCheckbox"] input[type="checkbox"]:checked ~ span,
+[data-testid="stCheckbox"] label div[role="checkbox"][aria-checked="true"] {
+    background-color: #FFD84D !important;
+    border-color: #FFD84D !important;
+}
+[data-testid="stCheckbox"] svg {
+    color: #0D1B2A !important;
+    fill: #0D1B2A !important;
+    stroke: #0D1B2A !important;
+}
 /* ── Select/Deselect buttons (top of panel) ── */
 [data-testid="stHorizontalBlock"] > div:last-child [data-testid="stButton"] button {
     background: #0F2133 !important;
@@ -219,17 +255,40 @@ div[data-testid="stFileUploaderDropzoneInput"],
 }
 .stDownloadButton > button:hover { background: #1DC9A420 !important; }
 
-/* ── UPDATED: Metric cards ── */
+/* ── UPDATED: Metric cards / parsed OM summary ── */
 div[data-testid="metric-container"] {
-    background: #0F2438 !important; border: 1px solid #1E3A55 !important;
-    border-radius: 10px !important; padding: 14px 16px !important;
+    background: #122A40 !important;
+    border: 1px solid #2B526F !important;
+    border-radius: 10px !important;
+    padding: 14px 16px !important;
+    box-shadow: 0 8px 22px rgba(0,0,0,0.22) !important;
 }
-div[data-testid="metric-container"] label {
-    color: #5A8FAA !important; font-size: 11px !important; font-weight: 600 !important;
-    text-transform: uppercase !important; letter-spacing: 0.08em !important;
+div[data-testid="metric-container"] * {
+    opacity: 1 !important;
+    visibility: visible !important;
 }
-div[data-testid="metric-container"] [data-testid="stMetricValue"] {
-    font-size: 20px !important; color: #1DC9A4 !important; font-weight: 700 !important;
+div[data-testid="metric-container"] label,
+div[data-testid="metric-container"] [data-testid="stMetricLabel"],
+div[data-testid="metric-container"] [data-testid="stMetricLabel"] *,
+div[data-testid="metric-container"] label * {
+    color: #9BC7DE !important;
+    font-size: 11px !important;
+    font-weight: 700 !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.08em !important;
+}
+div[data-testid="metric-container"] [data-testid="stMetricValue"],
+div[data-testid="metric-container"] [data-testid="stMetricValue"] *,
+div[data-testid="metric-container"] div[data-testid="stMetricValue"] {
+    font-size: 22px !important;
+    color: #FFFFFF !important;
+    font-weight: 800 !important;
+    line-height: 1.2 !important;
+    text-shadow: 0 1px 2px rgba(0,0,0,0.45) !important;
+}
+div[data-testid="metric-container"] [data-testid="stMetricDelta"],
+div[data-testid="metric-container"] [data-testid="stMetricDelta"] * {
+    color: #1DC9A4 !important;
 }
 
 .stProgress > div > div { background: #1DC9A4 !important; }
