@@ -18,8 +18,7 @@ html, body, [class*="css"], .stApp, .main {
 }
 .block-container {
     padding: 0 !important;
-    max-width: 480px !important;
-    margin: auto !important;
+    max-width: 100% !important;
     background: #0A1628 !important;
 }
 div[data-testid="stTextInput"] {
