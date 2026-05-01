@@ -22,6 +22,10 @@ html, body, [class*="css"], .stApp, .main {
     margin: auto !important;
     background: #0A1628 !important;
 }
+div[data-testid="stTextInput"] {
+    max-width: 400px !important;
+    margin: auto !important;
+}
 /* Navbar */
 .om-navbar {
     background: #0B1929;
