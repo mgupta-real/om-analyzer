@@ -141,7 +141,7 @@ div[data-testid="stAlert"] {
 """, unsafe_allow_html=True)
 
     # ── Centered login card ──
-    _, col, _ = st.columns([1, 1.4, 1])
+    _, col, _ = st.columns([1.5, 1, 1.5])
     with col:
         st.markdown("""
 <div class="om-card-top">
