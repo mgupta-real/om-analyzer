@@ -112,15 +112,21 @@ section[data-testid="stSidebar"] { display: none !important; }
     margin-right: -5rem !important;
     min-height: auto !important;
 }
-/* ── Checkboxes — always visible; yellow fill when selected ── */
+/* ════════════════════════════════════════════════════════════════════════
+   ── CHECKBOXES — single yellow box (NOT doubled) ──
+   • Hide the native <input> entirely (it was rendering as a 2nd checkbox)
+   • Style only ONE visible layer: the BaseWeb span/div wrapper
+   • Unchecked: yellow border, transparent fill
+   • Checked  : yellow fill with dark navy tick
+   ════════════════════════════════════════════════════════════════════════ */
 [data-testid="stCheckbox"] {
     background: transparent !important;
     background-color: transparent !important;
     padding: 2px 0 3px !important;
 }
 [data-testid="stCheckbox"] label {
-    gap: 8px !important;
-    align-items: flex-start !important;
+    gap: 10px !important;
+    align-items: center !important;
     background: transparent !important;
     background-color: transparent !important;
 }
@@ -134,49 +140,85 @@ section[data-testid="stSidebar"] { display: none !important; }
     background-color: transparent !important;
 }
 
-/* Native checkbox fallback: works when Streamlit exposes the input directly */
+/* HIDE the raw <input type="checkbox"> completely — it was the duplicate box */
 [data-testid="stCheckbox"] input[type="checkbox"] {
-    opacity: 1 !important;
+    opacity: 0 !important;
+    position: absolute !important;
+    width: 0 !important;
+    height: 0 !important;
+    min-width: 0 !important;
+    min-height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: none !important;
+    pointer-events: none !important;
+    appearance: none !important;
+    -webkit-appearance: none !important;
+}
+
+/* The ONLY visible checkbox — outer BaseWeb wrapper (unchecked state) */
+[data-testid="stCheckbox"] label > span:first-child,
+[data-testid="stCheckbox"] label > div:first-child {
+    background: transparent !important;
+    background-color: transparent !important;
+    border: 1.5px solid #FFC000 !important;
+    border-radius: 4px !important;
     width: 18px !important;
     height: 18px !important;
     min-width: 18px !important;
     min-height: 18px !important;
-    margin: 0 !important;
-    cursor: pointer !important;
-    appearance: none !important;
-    -webkit-appearance: none !important;
-    background-color: transparent !important;
-    border: 1.5px solid #FFC000 !important;
-    border-radius: 4px !important;
-    box-shadow: 0 0 0 1px rgba(255, 192, 0, 0.18) !important;
-}
-[data-testid="stCheckbox"] input[type="checkbox"]:checked {
-    background-color: #FFD84D !important;
-    border-color: #FFD84D !important;
-    box-shadow: 0 0 0 1px rgba(255, 216, 77, 0.35) !important;
+    box-shadow: none !important;
+    opacity: 1 !important;
+    flex-shrink: 0 !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    transition: all 0.15s ease !important;
 }
 
-/* Streamlit/BaseWeb custom checkbox fallback: keeps unchecked boxes visible */
-[data-testid="stCheckbox"] label > div:first-child,
-[data-testid="stCheckbox"] label span:first-child,
-[data-testid="stCheckbox"] label div[role="checkbox"] {
+/* Hide any nested inner box that BaseWeb adds (this was the second visible box) */
+[data-testid="stCheckbox"] label > span:first-child > div,
+[data-testid="stCheckbox"] label > span:first-child > span,
+[data-testid="stCheckbox"] label > div:first-child > div:first-child,
+[data-testid="stCheckbox"] label div[data-baseweb="checkbox"] > div:first-child {
+    background: transparent !important;
     background-color: transparent !important;
-    border: 1.5px solid #FFC000 !important;
-    border-radius: 4px !important;
-    opacity: 1 !important;
+    border: none !important;
+    box-shadow: none !important;
+    width: 100% !important;
+    height: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
 }
-[data-testid="stCheckbox"] input[type="checkbox"]:checked + div,
-[data-testid="stCheckbox"] input[type="checkbox"]:checked ~ div,
-[data-testid="stCheckbox"] input[type="checkbox"]:checked + span,
-[data-testid="stCheckbox"] input[type="checkbox"]:checked ~ span,
-[data-testid="stCheckbox"] label div[role="checkbox"][aria-checked="true"] {
-    background-color: #FFD84D !important;
-    border-color: #FFD84D !important;
+
+/* CHECKED state — yellow fill on the outer wrapper */
+[data-testid="stCheckbox"] input[type="checkbox"]:checked ~ span:first-child,
+[data-testid="stCheckbox"] input[type="checkbox"]:checked ~ div:first-child,
+[data-testid="stCheckbox"] label:has(input:checked) > span:first-child,
+[data-testid="stCheckbox"] label:has(input:checked) > div:first-child,
+[data-testid="stCheckbox"] label > span:first-child[aria-checked="true"],
+[data-testid="stCheckbox"] label > div:first-child[aria-checked="true"],
+[data-testid="stCheckbox"] label span[data-checked="true"],
+[data-testid="stCheckbox"] label div[data-checked="true"] {
+    background-color: #FFC000 !important;
+    background: #FFC000 !important;
+    border-color: #FFC000 !important;
 }
+
+/* Checkmark tick — dark navy on yellow */
 [data-testid="stCheckbox"] svg {
     color: #0D1B2A !important;
     fill: #0D1B2A !important;
     stroke: #0D1B2A !important;
+    width: 14px !important;
+    height: 14px !important;
+}
+
+/* Hover affordance on unchecked box */
+[data-testid="stCheckbox"] label:hover > span:first-child:not([aria-checked="true"]),
+[data-testid="stCheckbox"] label:hover > div:first-child:not([aria-checked="true"]) {
+    background-color: rgba(255, 192, 0, 0.12) !important;
+    background: rgba(255, 192, 0, 0.12) !important;
 }
 /* ── Select/Deselect buttons (top of panel) ── */
 [data-testid="stHorizontalBlock"] > div:last-child [data-testid="stButton"] button {
@@ -255,40 +297,79 @@ div[data-testid="stFileUploaderDropzoneInput"],
 }
 .stDownloadButton > button:hover { background: #1DC9A420 !important; }
 
-/* ── UPDATED: Metric cards / parsed OM summary ── */
-div[data-testid="metric-container"] {
+/* ════════════════════════════════════════════════════════════════════════
+   ── METRIC CARDS / parsed OM summary ──
+   Covers BOTH legacy [data-testid="metric-container"] AND new [data-testid="stMetric"]
+   Forces bright teal value + readable label across all Streamlit versions
+   ════════════════════════════════════════════════════════════════════════ */
+div[data-testid="metric-container"],
+div[data-testid="stMetric"],
+[data-testid="stMetric"] {
     background: #122A40 !important;
     border: 1px solid #2B526F !important;
     border-radius: 10px !important;
     padding: 14px 16px !important;
     box-shadow: 0 8px 22px rgba(0,0,0,0.22) !important;
 }
-div[data-testid="metric-container"] * {
+
+div[data-testid="metric-container"] *,
+div[data-testid="stMetric"] *,
+[data-testid="stMetric"] * {
     opacity: 1 !important;
     visibility: visible !important;
 }
+
+/* Metric LABEL — Units, Year Built, Occupancy, Avg Rent, Reno ROI, Tax Savings */
 div[data-testid="metric-container"] label,
+div[data-testid="stMetric"] label,
+[data-testid="stMetricLabel"],
+[data-testid="stMetricLabel"] *,
+[data-testid="stMetricLabel"] p,
+[data-testid="stMetricLabel"] div,
 div[data-testid="metric-container"] [data-testid="stMetricLabel"],
 div[data-testid="metric-container"] [data-testid="stMetricLabel"] *,
-div[data-testid="metric-container"] label * {
+div[data-testid="metric-container"] label *,
+div[data-testid="stMetric"] [data-testid="stMetricLabel"],
+div[data-testid="stMetric"] [data-testid="stMetricLabel"] *,
+div[data-testid="stMetric"] label * {
     color: #9BC7DE !important;
     font-size: 11px !important;
     font-weight: 700 !important;
     text-transform: uppercase !important;
     letter-spacing: 0.08em !important;
+    opacity: 1 !important;
 }
+
+/* Metric VALUE — 269, 2020, 93.70%, $2,070, N/A — bright teal so it pops */
 div[data-testid="metric-container"] [data-testid="stMetricValue"],
 div[data-testid="metric-container"] [data-testid="stMetricValue"] *,
-div[data-testid="metric-container"] div[data-testid="stMetricValue"] {
-    font-size: 22px !important;
-    color: #FFFFFF !important;
-    font-weight: 800 !important;
+div[data-testid="metric-container"] [data-testid="stMetricValue"] div,
+div[data-testid="metric-container"] [data-testid="stMetricValue"] p,
+div[data-testid="stMetric"] [data-testid="stMetricValue"],
+div[data-testid="stMetric"] [data-testid="stMetricValue"] *,
+div[data-testid="stMetric"] [data-testid="stMetricValue"] div,
+div[data-testid="stMetric"] [data-testid="stMetricValue"] p,
+[data-testid="stMetricValue"],
+[data-testid="stMetricValue"] *,
+[data-testid="stMetricValue"] div,
+[data-testid="stMetricValue"] p {
+    font-size: 26px !important;
+    color: #1DC9A4 !important;
+    font-weight: 700 !important;
     line-height: 1.2 !important;
+    opacity: 1 !important;
     text-shadow: 0 1px 2px rgba(0,0,0,0.45) !important;
 }
+
+/* Metric DELTA */
 div[data-testid="metric-container"] [data-testid="stMetricDelta"],
-div[data-testid="metric-container"] [data-testid="stMetricDelta"] * {
+div[data-testid="metric-container"] [data-testid="stMetricDelta"] *,
+div[data-testid="stMetric"] [data-testid="stMetricDelta"],
+div[data-testid="stMetric"] [data-testid="stMetricDelta"] *,
+[data-testid="stMetricDelta"],
+[data-testid="stMetricDelta"] * {
     color: #1DC9A4 !important;
+    opacity: 1 !important;
 }
 
 .stProgress > div > div { background: #1DC9A4 !important; }
