@@ -290,12 +290,33 @@ div[data-testid="stFileUploaderDropzoneInput"],
     padding: 12px 0 !important; width: 100% !important;
 }
 .stButton > button:hover { background: #18B090 !important; }
-.stDownloadButton > button {
-    background: #0F2133 !important; color: #1DC9A4 !important; border: 1.5px solid #1DC9A4 !important;
-    border-radius: 8px !important; font-weight: 600 !important; font-size: 14px !important;
-    padding: 10px 0 !important; width: 100% !important;
+
+/* Download buttons — solid filled style, matching .stButton */
+.stDownloadButton > button,
+[data-testid="stDownloadButton"] > button,
+[data-testid="stBaseButton-secondary"][kind="secondary"] {
+    background: #1DC9A4 !important;
+    color: #0D1B2A !important;
+    border: none !important;
+    border-radius: 8px !important;
+    font-weight: 700 !important;
+    font-size: 14px !important;
+    padding: 12px 0 !important;
+    width: 100% !important;
+    box-shadow: 0 4px 14px rgba(29, 201, 164, 0.25) !important;
+    transition: all 0.15s ease !important;
 }
-.stDownloadButton > button:hover { background: #1DC9A420 !important; }
+.stDownloadButton > button *,
+[data-testid="stDownloadButton"] > button * {
+    color: #0D1B2A !important;
+    fill: #0D1B2A !important;
+}
+.stDownloadButton > button:hover,
+[data-testid="stDownloadButton"] > button:hover {
+    background: #18B090 !important;
+    box-shadow: 0 6px 18px rgba(29, 201, 164, 0.35) !important;
+    transform: translateY(-1px) !important;
+}
 
 /* ════════════════════════════════════════════════════════════════════════
    ── METRIC CARDS / parsed OM summary ──
@@ -654,15 +675,36 @@ SCHEMA:
 CRITICAL EXTRACTION RULES:
 1. DEMOGRAPHICS: columns order is 1-mile, 3-mile, 5-mile, County, Metro. Extract all three radii.
    If 1-mile data is not present in the OM, leave 1-mile fields as null.
-2. FINANCIAL PERIODS: Extract ALL column headers exactly as they appear (e.g. "T12", "T6 Ann", "T3 Ann", "T1 Ann",
-   "Pro Forma YR1", "Year 0", "YR1", "YR2", "FY1", "F-3 Proforma Income", "Current Rents Proforma",
-   "2nd Generation Leases Proforma", "Year 2", "Year 3", etc.). Do NOT rename or standardize them.
-   If an OM shows multiple proforma scenarios side-by-side (e.g. F-3/Current Rents/2nd Gen), include ALL as periods.
-   If an OM shows a 5-year forward analysis table, include Year 2 through Year 5 as additional periods.
+2. FINANCIAL PERIODS: Extract ALL column headers exactly as they appear (e.g. "T-12 Actual", "T-9 Annualized",
+   "T-6 Annualized", "T-3 Annualized", "T-1 Annualized", "Year 1 Pro Forma", "Pro Forma YR1", "Year 0",
+   "YR1", "YR2", "FY1", "F-3 Proforma Income", "Current Rents Proforma", "2nd Generation Leases Proforma",
+   "Year 2", "Year 3", etc.). Do NOT rename or standardize them — preserve the exact label from the OM.
+
+   *** CRITICAL PRIORITY ORDER (this is the #1 most important rule for financials) ***
+   When the OM has BOTH an Operating Statement (with trailing periods + a Pro Forma column) AND a separate
+   multi-year Cash Flow projection table, you MUST extract the Operating Statement columns first, in this
+   priority order:
+     (a) Pro Forma / Year 1 Pro Forma  ← ALWAYS INCLUDE — this is the most important column for buyers
+     (b) T-12 Actual (or T12)           ← ALWAYS INCLUDE
+     (c) T-3 Annualized                 ← include if present
+     (d) T-6 Annualized                 ← include if present
+     (e) T-1 Annualized                 ← include if present
+     (f) T-9 Annualized                 ← include only if room remains
+     (g) Year 2, Year 3 from Cash Flow  ← include only if room remains AFTER above
+
+   The Pro Forma / Year 1 Pro Forma column is NEVER allowed to be dropped. If the Operating Statement has
+   a "Year 1 Pro Forma" or "Pro Forma" column (typically the rightmost column on the operating statement page),
+   that column MUST appear in the periods array and every income_line and expense_line MUST have its value
+   under that period key.
+
+   If the OM ONLY has a multi-year Cash Flow table (no separate trailing operating statement), then extract
+   Year 1 through Year 5 as periods.
+
    Cap total periods at 7 columns. Every income and expense line must have values for ALL period columns present.
    Mark is_total=true for EGI, Total Expenses, NOI, CFFO rows.
-   Mark is_subtotal=true for subtotal rows (Net Rental Income, Rental Collections, Total Controllable, NOI Before Reserves, etc.).
-   The note field must contain the full underwriting assumption text from the OM.
+   Mark is_subtotal=true for subtotal rows (Net Rental Income, Rental Collections, Total Controllable,
+   Total Non-Controllable, NOI Before Reserves, etc.).
+   The note field must contain the full underwriting assumption text/footnote from the OM.
 
 3. RENT COMPS: Use rent_comps_garden for garden/flat apartment comps, rent_comps_townhouse for townhouse comps.
    If the OM does not split by type, put all comps in rent_comps (full detail array) only.
@@ -2001,155 +2043,536 @@ with main_col:
 
         # ── Build "all summary tabs" multi-sheet workbook (Fix 4) ──
         def _build_summary_tabs_workbook(d: dict) -> bytes:
-            """One xlsx with every in-app summary tab as a separate sheet."""
-            import pandas as pd
+            """One xlsx with every in-app summary tab as a separate sheet,
+            styled to match the main Underwriting Report (cover row, navy
+            section headers, light subheaders, alternating rows, accent NOI/total rows)."""
             from openpyxl import Workbook
-            from openpyxl.styles import Font, PatternFill, Alignment
-            from openpyxl.utils.dataframe import dataframe_to_rows
+            from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+            from openpyxl.utils import get_column_letter as _col
+
+            # Reuse the same colour palette as the main report
+            HDR      = C_HDR        # navy section bar
+            HDR2     = C_HDR2       # cover line 2
+            HDR3     = C_HDR3       # NOI/cash flow accent
+            SUB_HDR  = C_SUB_HDR    # column headers (light grey)
+            HDR_TXT  = C_HDR_TEXT   # off-white text on navy
+            AMBER    = C_AMBER
+            BLUE_IN  = C_BLUE_IN
+            LBL      = C_LABEL
+            BODY     = C_BODY
+            WHITE    = C_WHITE
+            ALT      = C_ALT
+            BORDER   = C_BORDER
+
+            _side = Side(style="thin", color=BORDER)
+            _bord = Border(left=_side, right=_side, top=_side, bottom=_side)
+
+            prop_x   = (d.get("property") or {}).get("name") or "Property"
+            broker_x = (d.get("broker") or {}).get("name") or "N/A"
+            pd_x     = d.get("property") or {}
+            addr_x = (
+                f"{pd_x.get('address','')}, {pd_x.get('city','')}, "
+                f"{pd_x.get('state','')} {pd_x.get('zip','')}"
+            ).strip(", ")
+            date_x   = datetime.today().strftime("%B %d, %Y")
+            subtitle_x = (
+                f"{prop_x}  ·  {addr_x}  ·  {_v(pd_x.get('units'),'n')} Units  ·  "
+                f"{_v(pd_x.get('year_built'))} Built  ·  {broker_x}  ·  {date_x}"
+            )
 
             wb_s = Workbook()
             wb_s.remove(wb_s.active)
-            hdr_fill = PatternFill("solid", fgColor="FF1DC9A4")
-            hdr_font = Font(bold=True, color="FF0D1B2A", size=11)
-            cell_font = Font(color="FF3E3E3E", size=10)
 
-            def _add_sheet(name, df):
-                if df is None or df.empty:
-                    df = pd.DataFrame([{"Note": f"No {name.lower()} data extracted."}])
-                ws_s = wb_s.create_sheet(name[:31])
-                for r_idx, row in enumerate(dataframe_to_rows(df, index=False, header=True), 1):
-                    for c_idx, val in enumerate(row, 1):
-                        c = ws_s.cell(row=r_idx, column=c_idx, value=val)
-                        if r_idx == 1:
-                            c.fill = hdr_fill
-                            c.font = hdr_font
-                            c.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
-                        else:
-                            c.font = cell_font
-                            c.alignment = Alignment(vertical="center", wrap_text=True)
-                for col_idx, col_cells in enumerate(ws_s.columns, 1):
-                    max_len = 10
-                    for c in col_cells:
-                        if c.value is not None:
-                            max_len = max(max_len, min(len(str(c.value)), 60))
-                    ws_s.column_dimensions[get_column_letter(col_idx)].width = max_len + 2
-                ws_s.row_dimensions[1].height = 22
+            def _set_cell(ws, row, col, val, *, bold=False, bg=None, fg=BODY,
+                          size=9, ha="left", italic=False, wrap=True):
+                c = ws.cell(row=row, column=col)
+                c.value = val
+                c.font = Font(name="Calibri", bold=bold, color=fg, size=size, italic=italic)
+                c.alignment = Alignment(horizontal=ha, vertical="center", wrap_text=wrap)
+                if bg:
+                    c.fill = PatternFill("solid", fgColor=bg)
+                c.border = _bord
+                return c
 
-            # Unit Mix
+            def _fill_row(ws, row, ncols, bg):
+                for c in range(1, ncols + 1):
+                    ws.cell(row=row, column=c).fill = PatternFill("solid", fgColor=bg)
+
+            def _cover_block(ws, line1, line2, ncols):
+                _fill_row(ws, 1, ncols, HDR)
+                _set_cell(ws, 1, 1, line1, bold=True, bg=HDR, fg=HDR_TXT, size=13)
+                ws.row_dimensions[1].height = 28
+                ws.row_dimensions[2].height = 6  # spacer (matches main report)
+                return 3
+
+            def _section_header(ws, row, title, ncols):
+                _fill_row(ws, row, ncols, HDR)
+                _set_cell(ws, row, 1, title, bold=True, bg=HDR, fg=HDR_TXT, size=11)
+                ws.row_dimensions[row].height = 22
+                return row + 1
+
+            def _column_headers(ws, row, headers):
+                _fill_row(ws, row, len(headers), SUB_HDR)
+                for i, h in enumerate(headers):
+                    _set_cell(ws, row, 1 + i, h, bold=True, bg=SUB_HDR, fg=LBL, size=9, ha="center")
+                ws.row_dimensions[row].height = 18
+                return row + 1
+
+            def _data_row(ws, row, vals, alts=None, alt_bg=False):
+                bg = ALT if alt_bg else WHITE
+                _fill_row(ws, row, len(vals), bg)
+                for i, v in enumerate(vals):
+                    ha = alts[i] if alts and i < len(alts) else "left"
+                    fg = BLUE_IN if ha == "right" else BODY
+                    _set_cell(ws, row, 1 + i, v if v is not None else "—",
+                              bg=bg, fg=fg, size=9, ha=ha)
+                ws.row_dimensions[row].height = 16
+                return row + 1
+
+            def _accent_row(ws, row, vals, ncols, color=HDR3):
+                """Highlighted row (e.g. NOI, totals) — like _noirow in main report"""
+                _fill_row(ws, row, ncols, color)
+                for i, v in enumerate(vals):
+                    ha = "left" if i == 0 else "right"
+                    _set_cell(ws, row, 1 + i, v if v is not None else "—",
+                              bold=True, bg=color, fg=AMBER, size=10, ha=ha)
+                ws.row_dimensions[row].height = 20
+                return row + 1
+
+            def _kv_row(ws, row, label, value, ncols, alt_bg=False):
+                bg = ALT if alt_bg else WHITE
+                _fill_row(ws, row, ncols, bg)
+                _set_cell(ws, row, 1, label, bold=True, bg=bg, fg=LBL, size=9)
+                _set_cell(ws, row, 2, str(value) if value is not None and value != "" else "—",
+                          bg=bg, fg=BLUE_IN, size=9)
+                ws.row_dimensions[row].height = 16
+                return row + 1
+
+            def _autosize_columns(ws, widths):
+                for col_letter, w in widths.items():
+                    ws.column_dimensions[col_letter].width = w
+
+            def _add_footer(ws, row, ncols):
+                ws.row_dimensions[row].height = 6
+                row += 1
+                _fill_row(ws, row, ncols, ALT)
+                _set_cell(ws, row, 1,
+                          "AI-generated. Internal use only. Verify all figures independently. "
+                          "Powered by Anthropic Claude.",
+                          bg=ALT, fg="FF888880", size=8, italic=True)
+                ws.row_dimensions[row].height = 13
+
+            # ────────────────────────────────────────────────────────────────
+            # Sheet 1 — Unit Mix
+            # ────────────────────────────────────────────────────────────────
+            ws = wb_s.create_sheet("Unit Mix")
+            ws.sheet_view.showGridLines = False
+            _autosize_columns(ws, {"A":18,"B":12,"C":12,"D":12,"E":14,"F":14,"G":14,"H":14})
+            r = _cover_block(ws, "UNIT MIX SUMMARY", subtitle_x, 8)
+            r = _section_header(ws, r, "A.  UNIT MIX BY FLOOR PLAN", 8)
             umix_x = d.get("unit_mix") or []
-            df_um = pd.DataFrame([{
-                "Type": u.get("type"), "Plan": u.get("plan"), "Units": u.get("count"),
-                "SF": u.get("sf"), "Market Rent": u.get("market_rent"),
-                "Eff. Rent": u.get("eff_rent"), "Target Rent": u.get("target_rent"),
-                "Upside/Unit": u.get("upside"),
-            } for u in umix_x]) if umix_x else pd.DataFrame()
-            _add_sheet("Unit Mix", df_um)
+            if umix_x:
+                r = _column_headers(ws, r, ["Type","Plan","Units","SF","Market Rent",
+                                             "Eff. Rent","Target Rent","Upside/Unit"])
+                aligns = ["left","left","center","right","right","right","right","right"]
+                for i, u in enumerate(umix_x):
+                    r = _data_row(ws, r, [
+                        u.get("type"), u.get("plan"),
+                        _v(u.get("count"), "n"), _v(u.get("sf"), "n"),
+                        _v(u.get("market_rent"), "$"), _v(u.get("eff_rent"), "$"),
+                        _v(u.get("target_rent"), "$"), _v(u.get("upside"), "$"),
+                    ], alts=aligns, alt_bg=bool(i % 2))
+            else:
+                r = _kv_row(ws, r, "Note", "No unit mix data extracted.", 8)
+            _add_footer(ws, r, 8)
 
-            # Value-Add Floor Plans
-            va_x = d.get("value_add") or {}
+            # ────────────────────────────────────────────────────────────────
+            # Sheet 2 — Value-Add
+            # ────────────────────────────────────────────────────────────────
+            ws = wb_s.create_sheet("Value-Add")
+            ws.sheet_view.showGridLines = False
+            _autosize_columns(ws, {"A":18,"B":10,"C":10,"D":14,"E":14,"F":14,"G":16,"H":30})
+            r = _cover_block(ws, "VALUE-ADD SUMMARY", subtitle_x, 8)
+
+            r = _section_header(ws, r, "A.  VALUE-ADD BY FLOOR PLAN", 8)
+            va_x       = d.get("value_add") or {}
             va_plans_x = va_x.get("by_floor_plan") or []
-            df_va = pd.DataFrame([{
-                "Type": p.get("type"), "SF": p.get("sf"), "Units": p.get("units"),
-                "In-Place Rent": p.get("inplace_rent"), "Rehab Cost": p.get("rehab_cost"),
-                "Premium/Unit": p.get("premium"), "Post-Rehab Rent": p.get("post_rehab_rent"),
-            } for p in va_plans_x]) if va_plans_x else pd.DataFrame()
-            _add_sheet("Value-Add Floor Plans", df_va)
+            if va_plans_x:
+                r = _column_headers(ws, r, ["Type","Units","SF","In-Place Rent",
+                                             "Rehab Cost","Premium/Unit","Post-Rehab Rent",""])
+                aligns = ["left","center","right","right","right","right","right","left"]
+                for i, p in enumerate(va_plans_x):
+                    r = _data_row(ws, r, [
+                        p.get("type"), _v(p.get("units"), "n"), _v(p.get("sf"), "n"),
+                        _v(p.get("inplace_rent"), "$"), _v(p.get("rehab_cost"), "$"),
+                        _v(p.get("premium"), "$"), _v(p.get("post_rehab_rent"), "$"), "",
+                    ], alts=aligns, alt_bg=bool(i % 2))
+            else:
+                r = _kv_row(ws, r, "Note", "No floor plan value-add data extracted.", 8)
 
-            # Value-Add Levers
+            ws.row_dimensions[r].height = 6; r += 1
+            r = _section_header(ws, r, "B.  REVENUE UPSIDE LEVERS", 8)
             levers_x = d.get("value_add_levers") or []
-            df_lv = pd.DataFrame([{
-                "Lever": lv.get("lever"), "Units": lv.get("units"),
-                "Mo. Premium": lv.get("monthly_premium"),
-                "Annual Upside": lv.get("annual_upside"), "Notes": lv.get("notes"),
-            } for lv in levers_x]) if levers_x else pd.DataFrame()
-            _add_sheet("Value-Add Levers", df_lv)
+            if levers_x:
+                r = _column_headers(ws, r, ["Lever","Units","Mo. Premium","Annual Upside",
+                                             "Notes","","",""])
+                aligns = ["left","center","right","right","left","left","left","left"]
+                for i, lv in enumerate(levers_x):
+                    is_total = "TOTAL" in (lv.get("lever") or "").upper()
+                    row_data = [
+                        lv.get("lever"),
+                        "" if is_total else _v(lv.get("units"), "n"),
+                        "" if is_total else _v(lv.get("monthly_premium"), "$"),
+                        _v(lv.get("annual_upside"), "$"),
+                        lv.get("notes") or "", "", "", "",
+                    ]
+                    if is_total:
+                        r = _accent_row(ws, r, row_data, 8)
+                    else:
+                        r = _data_row(ws, r, row_data, alts=aligns, alt_bg=bool(i % 2))
+            else:
+                r = _kv_row(ws, r, "Note", "No revenue lever data extracted.", 8)
 
-            # Rent Comps
+            ws.row_dimensions[r].height = 6; r += 1
+            r = _section_header(ws, r, "C.  CAPEX & ROI SUMMARY", 8)
+            for i, (k, v) in enumerate([
+                ("Total Renovation Cost",       _v(va_x.get("total_cost"), "$")),
+                ("Cost Per Unit (all-in)",      _v(va_x.get("cost_per_unit"), "$")),
+                ("Exterior / Additional CapEx", _v(va_x.get("exterior_capex"), "$")),
+                ("Monthly Rent Premium",        _v(va_x.get("monthly_premium"), "$")),
+                ("Annual Rent Premium",         _v(va_x.get("annual_premium"), "$")),
+                ("Return on Investment",        f"{va_x.get('roi_pct') or 'N/A'}%"),
+            ]):
+                r = _kv_row(ws, r, k, v, 8, alt_bg=bool(i % 2))
+            _add_footer(ws, r, 8)
+
+            # ────────────────────────────────────────────────────────────────
+            # Sheet 3 — Rent Comps
+            # ────────────────────────────────────────────────────────────────
+            ws = wb_s.create_sheet("Rent Comps")
+            ws.sheet_view.showGridLines = False
+            _autosize_columns(ws, {"A":24,"B":12,"C":10,"D":10,"E":12,"F":14,"G":14,"H":10,"I":24})
+            r = _cover_block(ws, "RENT COMPARABLES SUMMARY", subtitle_x, 9)
+
             rg_x     = d.get("rent_comps_garden")    or []
             rth_x    = d.get("rent_comps_townhouse") or []
             rcomps_x = d.get("rent_comps")           or []
-            all_comps = []
-            for c in rg_x:
-                all_comps.append({"Property": c.get("name"), "Type": "Garden",
-                                  "Rent": c.get("rent"), "Notes": c.get("notes")})
-            for c in rth_x:
-                all_comps.append({"Property": c.get("name"), "Type": "Townhouse",
-                                  "Rent": c.get("rent"), "Notes": c.get("notes")})
-            for c in rcomps_x:
-                all_comps.append({"Property": c.get("name"), "Type": c.get("comp_type"),
-                                  "Built": c.get("year_built"), "Units": c.get("units"),
-                                  "Occ": c.get("occupancy"),
-                                  "Mkt Rent": c.get("total_market"),
-                                  "Eff Rent": c.get("total_eff"),
-                                  "Avg SF": c.get("avg_sf")})
-            _add_sheet("Rent Comps", pd.DataFrame(all_comps))
 
-            # Financials
-            fin_x = d.get("financials") or {}
-            periods_x = fin_x.get("periods") or []
-            inc_x     = fin_x.get("income_lines") or []
+            if rg_x:
+                r = _section_header(ws, r, "A.  GARDEN RENT COMPARABLES", 9)
+                r = _column_headers(ws, r, ["Property","Type","Year","Distance","Units",
+                                             "Mkt Rent","Eff Rent","Avg SF","Notes"])
+                for i, c in enumerate(rg_x):
+                    r = _data_row(ws, r, [
+                        c.get("name"), "Garden", _v(c.get("year_built")),
+                        c.get("distance") or "—", _v(c.get("units"),"n"),
+                        _v(c.get("rent"),"$"), _v(c.get("rent"),"$"),
+                        _v(c.get("avg_sf"),"n"), c.get("notes") or "",
+                    ], alts=["left","center","center","center","center","right","right","right","left"],
+                       alt_bg=bool(i % 2))
+                ws.row_dimensions[r].height = 6; r += 1
+
+            if rth_x:
+                sec_letter = "B" if rg_x else "A"
+                r = _section_header(ws, r, f"{sec_letter}.  TOWNHOUSE RENT COMPARABLES", 9)
+                r = _column_headers(ws, r, ["Property","Type","Year","Distance","Units",
+                                             "Mkt Rent","Eff Rent","Avg SF","Notes"])
+                for i, c in enumerate(rth_x):
+                    r = _data_row(ws, r, [
+                        c.get("name"), "Townhouse", _v(c.get("year_built")),
+                        c.get("distance") or "—", _v(c.get("units"),"n"),
+                        _v(c.get("rent"),"$"), _v(c.get("rent"),"$"),
+                        _v(c.get("avg_sf"),"n"), c.get("notes") or "",
+                    ], alts=["left","center","center","center","center","right","right","right","left"],
+                       alt_bg=bool(i % 2))
+                ws.row_dimensions[r].height = 6; r += 1
+
+            if rcomps_x:
+                sec_full = "A" if (not rg_x and not rth_x) else ("C" if (rg_x and rth_x) else "B")
+                r = _section_header(ws, r, f"{sec_full}.  FULL COMPARABLE DETAIL", 9)
+                r = _column_headers(ws, r, ["Property","Type","Year Built","Units","Occupancy",
+                                             "Mkt Rent","Eff Rent","Avg SF","Notes"])
+                for i, c in enumerate(rcomps_x):
+                    r = _data_row(ws, r, [
+                        c.get("name"), c.get("comp_type") or "—",
+                        _v(c.get("year_built")), _v(c.get("units"), "n"),
+                        _pct(c.get("occupancy")) if c.get("occupancy") else "—",
+                        _v(c.get("total_market"), "$"), _v(c.get("total_eff"), "$"),
+                        _v(c.get("avg_sf"), "n"), "",
+                    ], alts=["left","center","center","center","center","right","right","right","left"],
+                       alt_bg=bool(i % 2))
+                ws.row_dimensions[r].height = 6; r += 1
+
+            if not rg_x and not rth_x and not rcomps_x:
+                r = _section_header(ws, r, "A.  RENT COMPARABLES", 9)
+                r = _kv_row(ws, r, "Note", "No rent comp data extracted.", 9)
+
+            _add_footer(ws, r, 9)
+
+            # ────────────────────────────────────────────────────────────────
+            # Sheet 4 — Financials
+            # ────────────────────────────────────────────────────────────────
+            ws = wb_s.create_sheet("Financials")
+            ws.sheet_view.showGridLines = False
+            fin_x     = d.get("financials") or {}
+            periods_x = (fin_x.get("periods") or [])[:7]
+            inc_x     = fin_x.get("income_lines")  or []
             exp_x     = fin_x.get("expense_lines") or []
             noi_x     = fin_x.get("noi") or {}
-            fin_rows = []
-            for line in inc_x + exp_x:
-                row = {"Line Item": line.get("item")}
-                for p in periods_x:
-                    row[p] = (line.get("values") or {}).get(p)
-                fin_rows.append(row)
-            if noi_x:
-                row = {"Line Item": "NET OPERATING INCOME"}
-                for p in periods_x:
-                    row[p] = noi_x.get(p)
-                fin_rows.append(row)
-            _add_sheet("Financials", pd.DataFrame(fin_rows))
+            n_p = max(len(periods_x), 1)
+            cols_fin = {"A": 32}
+            for i, c_letter in enumerate("BCDEFGH"):
+                if i < n_p:
+                    cols_fin[c_letter] = 16
+            cols_fin[chr(ord("A") + 1 + n_p)] = 36   # Notes column
+            _autosize_columns(ws, cols_fin)
+            ncols_fin = 1 + n_p + 1
+            r = _cover_block(ws, "FINANCIALS SUMMARY", subtitle_x, ncols_fin)
 
-            # Tax & Abatement
+            if periods_x and (inc_x or exp_x):
+                title = f"A.  OPERATING STATEMENT  ({'  ·  '.join(periods_x)})"
+                r = _section_header(ws, r, title, ncols_fin)
+                r = _column_headers(ws, r, ["Line Item"] + periods_x + ["Notes"])
+                aligns = ["left"] + ["right"] * n_p + ["left"]
+
+                def _line_row(line):
+                    vals = line.get("values") or {}
+                    return [line.get("item") or "—"] + [
+                        _v(vals.get(p), "$") if vals.get(p) is not None else "—"
+                        for p in periods_x
+                    ] + [line.get("note") or ""]
+
+                rendered_totals = set()
+
+                # INCOME
+                _fill_row(ws, r, ncols_fin, SUB_HDR)
+                _set_cell(ws, r, 1, "INCOME", bold=True, bg=SUB_HDR, fg=LBL, size=9)
+                ws.row_dimensions[r].height = 17; r += 1
+                for i, line in enumerate(inc_x):
+                    name = (line.get("item") or "").lower()
+                    if line.get("is_total"):
+                        rendered_totals.add(name)
+                        r = _accent_row(ws, r, _line_row(line), ncols_fin)
+                    elif line.get("is_subtotal"):
+                        r = _accent_row(ws, r, _line_row(line), ncols_fin, color=HDR2)
+                    else:
+                        r = _data_row(ws, r, _line_row(line), alts=aligns, alt_bg=bool(i % 2))
+
+                # EXPENSES
+                _fill_row(ws, r, ncols_fin, SUB_HDR)
+                _set_cell(ws, r, 1, "EXPENSES", bold=True, bg=SUB_HDR, fg=LBL, size=9)
+                ws.row_dimensions[r].height = 17; r += 1
+                for i, line in enumerate(exp_x):
+                    name = (line.get("item") or "").lower()
+                    if line.get("is_total"):
+                        rendered_totals.add(name)
+                        r = _accent_row(ws, r, _line_row(line), ncols_fin, color=HDR2)
+                    elif line.get("is_subtotal"):
+                        r = _accent_row(ws, r, _line_row(line), ncols_fin, color=HDR2)
+                    else:
+                        r = _data_row(ws, r, _line_row(line), alts=aligns, alt_bg=bool(i % 2))
+
+                noi_already = any("net operating income" in t for t in rendered_totals)
+                if not noi_already and any(_is_num(noi_x.get(p)) for p in periods_x):
+                    r = _accent_row(ws, r, ["NET OPERATING INCOME"] + [
+                        _v(noi_x.get(p), "$") if _is_num(noi_x.get(p)) else "—"
+                        for p in periods_x
+                    ] + [""], ncols_fin)
+            else:
+                r = _section_header(ws, r, "A.  OPERATING STATEMENT", ncols_fin)
+                r = _kv_row(ws, r, "Note", "No financial data extracted.", ncols_fin)
+
+            _add_footer(ws, r, ncols_fin)
+
+            # ────────────────────────────────────────────────────────────────
+            # Sheet 5 — Tax & Abatement
+            # ────────────────────────────────────────────────────────────────
+            ws = wb_s.create_sheet("Tax & Abatement")
+            ws.sheet_view.showGridLines = False
+            _autosize_columns(ws, {"A":32,"B":40})
+            r = _cover_block(ws, "TAX & ABATEMENT SUMMARY", subtitle_x, 2)
+
             tax_x = d.get("tax") or {}
-            tax_rows = [{"Field": k.replace("_", " ").title(), "Value": v}
-                        for k, v in tax_x.items() if v is not None and v != ""]
-            _add_sheet("Tax & Abatement", pd.DataFrame(tax_rows))
-
-            # Demographics
-            demo_x = d.get("demographics") or {}
-            demo_rows = []
-            metric_pairs = [
-                ("Population (2025)", "pop_1mi", "pop_3mi", "pop_5mi"),
-                ("Population (2030)", "pop_2030_1mi", "pop_2030_3mi", "pop_2030_5mi"),
-                ("Median Income (2025)", "median_income_1mi", "median_income_3mi", "median_income_5mi"),
-                ("Median Income (2030)", "median_income_2030_1mi", "median_income_2030_3mi", "median_income_2030_5mi"),
-                ("Income Growth", "income_growth_1mi", "income_growth_3mi", "income_growth_5mi"),
-                ("Renter %", "renter_pct_1mi", "renter_pct_3mi", "renter_pct_5mi"),
-                ("College %", "college_pct_1mi", "college_pct_3mi", "college_pct_5mi"),
-                ("White Collar %", "white_collar_pct_1mi", "white_collar_pct_3mi", "white_collar_pct_5mi"),
+            tax_field_rows = [
+                ("Parcel ID",             tax_x.get("parcel_id")),
+                ("Assessed Market Value", _v(tax_x.get("assessed_value"), "$")),
+                ("Millage — City",        tax_x.get("millage_city")),
+                ("Millage — County",      tax_x.get("millage_county")),
+                ("Total Millage Rate",    tax_x.get("millage_total")),
+                ("Ad Valorem Tax",        _v(tax_x.get("tax_base"), "$")),
+                ("Solid Waste / Fees",    _v(tax_x.get("solid_waste_fee"), "$")),
+                ("Total Annual Tax Bill", _v(tax_x.get("total_tax"), "$")),
             ]
-            for label, k1, k3, k5 in metric_pairs:
-                demo_rows.append({"Metric": label,
-                                  "1-Mile": demo_x.get(k1),
-                                  "3-Mile": demo_x.get(k3),
-                                  "5-Mile": demo_x.get(k5)})
-            _add_sheet("Demographics", pd.DataFrame(demo_rows))
+            tax_field_rows = [(k, v) for k, v in tax_field_rows if v not in (None, "", "N/A")]
+            if tax_field_rows:
+                r = _section_header(ws, r, "A.  PROPERTY TAX DETAIL", 2)
+                for i, (k, v) in enumerate(tax_field_rows):
+                    r = _kv_row(ws, r, k, v, 2, alt_bg=bool(i % 2))
 
-            # Financing
+            ab_rows = [
+                ("Program",            tax_x.get("abatement_program")),
+                ("Abatement %",        f"{tax_x.get('abatement_pct') or 'N/A'}%" if tax_x.get("abatement_pct") else None),
+                ("Commitment Term",    tax_x.get("abatement_term_note")),
+                ("Annual Tax Savings", _v(tax_x.get("abatement_annual_savings"), "$") if tax_x.get("abatement_annual_savings") else None),
+                ("Max Allowable Rent", _v(tax_x.get("max_allowable_rent"), "$") if tax_x.get("max_allowable_rent") else None),
+            ]
+            ab_rows = [(k, v) for k, v in ab_rows if v not in (None, "", "N/A")]
+            if ab_rows:
+                ws.row_dimensions[r].height = 6; r += 1
+                r = _section_header(ws, r, "B.  TAX ABATEMENT PROGRAM", 2)
+                for i, (k, v) in enumerate(ab_rows):
+                    r = _kv_row(ws, r, k, v, 2, alt_bg=bool(i % 2))
+
+            if not tax_field_rows and not ab_rows:
+                r = _section_header(ws, r, "A.  PROPERTY TAX", 2)
+                r = _kv_row(ws, r, "Note", "No tax data extracted.", 2)
+
+            _add_footer(ws, r, 2)
+
+            # ────────────────────────────────────────────────────────────────
+            # Sheet 6 — Demographics
+            # ────────────────────────────────────────────────────────────────
+            ws = wb_s.create_sheet("Demographics")
+            ws.sheet_view.showGridLines = False
+            _autosize_columns(ws, {"A":34,"B":18,"C":18,"D":18})
+            r = _cover_block(ws, "DEMOGRAPHICS SUMMARY", subtitle_x, 4)
+            r = _section_header(ws, r, "A.  POPULATION & INCOME", 4)
+            r = _column_headers(ws, r, ["Metric","1-Mile Radius","3-Mile Radius","5-Mile Radius"])
+
+            demo_x = d.get("demographics") or {}
+            metric_pairs = [
+                ("Population (2025)",         "pop_1mi", "pop_3mi", "pop_5mi", "n"),
+                ("Population (2030 Proj.)",   "pop_2030_1mi", "pop_2030_3mi", "pop_2030_5mi", "n"),
+                ("Population Growth (5-yr)",  "pop_growth_1mi", "pop_growth_3mi", "pop_growth_5mi", None),
+                ("Median HH Income (2025)",   "median_income_1mi", "median_income_3mi", "median_income_5mi", "$"),
+                ("Median HH Income (2030)",   "median_income_2030_1mi", "median_income_2030_3mi", "median_income_2030_5mi", "$"),
+                ("Income Growth (5-yr)",      "income_growth_1mi", "income_growth_3mi", "income_growth_5mi", None),
+                ("Renter %",                  "renter_pct_1mi", "renter_pct_3mi", "renter_pct_5mi", None),
+                ("Bachelor's Degree+",        "college_pct_1mi", "college_pct_3mi", "college_pct_5mi", None),
+                ("White-Collar %",            "white_collar_pct_1mi", "white_collar_pct_3mi", "white_collar_pct_5mi", None),
+            ]
+            aligns_demo = ["left", "right", "right", "right"]
+            for i, (label, k1, k3, k5, fmt) in enumerate(metric_pairs):
+                v1 = _v(demo_x.get(k1), fmt) if fmt else (demo_x.get(k1) or "—")
+                v3 = _v(demo_x.get(k3), fmt) if fmt else (demo_x.get(k3) or "—")
+                v5 = _v(demo_x.get(k5), fmt) if fmt else (demo_x.get(k5) or "—")
+                r = _data_row(ws, r, [label, v1, v3, v5], alts=aligns_demo, alt_bg=bool(i % 2))
+            _add_footer(ws, r, 4)
+
+            # ────────────────────────────────────────────────────────────────
+            # Sheet 7 — Financing
+            # ────────────────────────────────────────────────────────────────
+            ws = wb_s.create_sheet("Financing")
+            ws.sheet_view.showGridLines = False
+            _autosize_columns(ws, {"A":32,"B":40})
+            r = _cover_block(ws, "FINANCING SUMMARY", subtitle_x, 2)
+
             fin_i_x = d.get("financing") or {}
-            nf_i_x  = fin_i_x.get("new_financing")  or {}
             asd_i_x = fin_i_x.get("assumable_debt") or {}
-            fin_field_rows = [{"Field": "Offering Type", "Value": fin_i_x.get("offering_type")}]
-            for label, src in [("Assumable Debt", asd_i_x), ("New Financing", nf_i_x)]:
-                if any(src.get(k) for k in ["lender", "loan_amount", "interest_rate", "loan_type"]):
-                    fin_field_rows.append({"Field": "—" * 8, "Value": label})
-                    for k, v in src.items():
-                        if v is not None and v != "":
-                            fin_field_rows.append({"Field": k.replace("_", " ").title(), "Value": v})
-            _add_sheet("Financing", pd.DataFrame(fin_field_rows))
+            nf_i_x  = fin_i_x.get("new_financing")  or {}
 
-            # Flags
+            r = _section_header(ws, r, "A.  OFFERING & DEBT CONTACT", 2)
+            for i, (k, v) in enumerate([
+                ("Offering Type", fin_i_x.get("offering_type")),
+                ("Debt Contact",  fin_i_x.get("debt_contact")),
+                ("Notes",         fin_i_x.get("notes")),
+            ]):
+                r = _kv_row(ws, r, k, v, 2, alt_bg=bool(i % 2))
+
+            if any(asd_i_x.get(k) for k in ["lender","loan_amount","interest_rate","loan_type"]):
+                ws.row_dimensions[r].height = 6; r += 1
+                r = _section_header(ws, r, "B.  ASSUMABLE DEBT", 2)
+                rows_asd = [
+                    ("Lender",            asd_i_x.get("lender")),
+                    ("Loan Type",         asd_i_x.get("loan_type")),
+                    ("Loan Amount",       _v(asd_i_x.get("loan_amount"), "$")),
+                    ("Interest Rate",     _pct(asd_i_x.get("interest_rate"))),
+                    ("Rate Type",         asd_i_x.get("rate_type")),
+                    ("LTV",               _pct(asd_i_x.get("loan_to_value"))),
+                    ("Interest-Only",     asd_i_x.get("interest_only_period")),
+                    ("Maturity Date",     asd_i_x.get("maturity_date")),
+                    ("DSCR",              asd_i_x.get("dscr")),
+                ]
+                for i, (k, v) in enumerate(rows_asd):
+                    r = _kv_row(ws, r, k, v, 2, alt_bg=bool(i % 2))
+
+            if any(nf_i_x.get(k) for k in ["lender","loan_amount","interest_rate","loan_type"]):
+                ws.row_dimensions[r].height = 6; r += 1
+                sec = "C" if any(asd_i_x.get(k) for k in ["lender","loan_amount","interest_rate","loan_type"]) else "B"
+                r = _section_header(ws, r, f"{sec}.  NEW FINANCING", 2)
+                rows_nf = [
+                    ("Lender",        nf_i_x.get("lender")),
+                    ("Loan Type",     nf_i_x.get("loan_type")),
+                    ("Loan Amount",   _v(nf_i_x.get("loan_amount"), "$")),
+                    ("Interest Rate", _pct(nf_i_x.get("interest_rate"))),
+                    ("Rate Type",     nf_i_x.get("rate_type")),
+                    ("LTV",           _pct(nf_i_x.get("loan_to_value"))),
+                    ("Interest-Only", nf_i_x.get("interest_only_period")),
+                ]
+                for i, (k, v) in enumerate(rows_nf):
+                    r = _kv_row(ws, r, k, v, 2, alt_bg=bool(i % 2))
+
+            _add_footer(ws, r, 2)
+
+            # ────────────────────────────────────────────────────────────────
+            # Sheet 8 — Flags
+            # ────────────────────────────────────────────────────────────────
+            ws = wb_s.create_sheet("Flags")
+            ws.sheet_view.showGridLines = False
+            _autosize_columns(ws, {"A":14,"B":28,"C":60})
+            r = _cover_block(ws, "UNDERWRITING FLAGS", subtitle_x, 3)
+            r = _section_header(ws, r, "A.  FLAGS GENERATED FROM OM", 3)
+
             flags_x = d.get("flags") or []
-            df_flags = pd.DataFrame([{
-                "Category": fl.get("category"),
-                "Title": fl.get("title"),
-                "Detail": fl.get("detail"),
-            } for fl in flags_x]) if flags_x else pd.DataFrame()
-            _add_sheet("Flags", df_flags)
+            if flags_x:
+                r = _column_headers(ws, r, ["Category", "Title", "Detail"])
+                # Same colour scheme as main report
+                flag_bg = {"Warning": C_WARN, "Opportunity": C_GREEN_L,
+                           "Info": C_BLUE_L, "Verify": C_PURPLE_L}
+                for fl in flags_x:
+                    cat = fl.get("category", "Info")
+                    bg  = flag_bg.get(cat, WHITE)
+                    _set_cell(ws, r, 1, cat,            bold=True, bg=bg, fg=LBL,  size=9)
+                    _set_cell(ws, r, 2, fl.get("title", ""),  bold=True, bg=bg, fg=LBL,  size=9)
+                    _set_cell(ws, r, 3, fl.get("detail", ""),            bg=bg, fg=BODY, size=9)
+                    ws.row_dimensions[r].height = 28
+                    r += 1
+            else:
+                r = _kv_row(ws, r, "Note", "No flags generated.", 3)
+
+            _add_footer(ws, r, 3)
+
+            # ── Auto-fit row heights on every sheet ──
+            for sheet in wb_s.worksheets:
+                col_widths = {}
+                for letter, dim in sheet.column_dimensions.items():
+                    if dim.width:
+                        col_widths[letter] = dim.width
+                for row_cells in sheet.iter_rows():
+                    r_idx = row_cells[0].row
+                    if r_idx == 1:
+                        continue
+                    existing = sheet.row_dimensions[r_idx].height
+                    max_lines = 1
+                    for cell in row_cells:
+                        val = cell.value
+                        if val is None or val == "":
+                            continue
+                        text = str(val)
+                        col_w = col_widths.get(cell.column_letter, 12)
+                        chars_per_line = max(int(col_w * 1.1), 8)
+                        lines_for_cell = 0
+                        for segment in text.split("\n"):
+                            seg_len = len(segment)
+                            if seg_len == 0:
+                                lines_for_cell += 1
+                            else:
+                                lines_for_cell += max(1, -(-seg_len // chars_per_line))
+                        if lines_for_cell > max_lines:
+                            max_lines = lines_for_cell
+                    target = min(max(14, max_lines * 14 + 2), 80)
+                    if existing is None or target > existing:
+                        sheet.row_dimensions[r_idx].height = target
 
             buf_s = io.BytesIO()
             wb_s.save(buf_s)
