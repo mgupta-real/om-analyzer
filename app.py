@@ -302,14 +302,32 @@ div[data-testid="stFileUploaderDropzoneInput"],
    Covers BOTH legacy [data-testid="metric-container"] AND new [data-testid="stMetric"]
    Forces bright teal value + readable label across all Streamlit versions
    ════════════════════════════════════════════════════════════════════════ */
+
+/* Make the column wrapper around each metric transparent so the card bg shows
+   uniformly — fixes the "last column" looking different from the others */
+[data-testid="stHorizontalBlock"] [data-testid="stMetric"],
+[data-testid="stHorizontalBlock"] div[data-testid="metric-container"] {
+    background: #122A40 !important;
+}
+[data-testid="stHorizontalBlock"]:has([data-testid="stMetric"]) > div,
+[data-testid="stHorizontalBlock"]:has(div[data-testid="metric-container"]) > div {
+    background: transparent !important;
+    border-left: none !important;
+    padding: 0 4px !important;
+    margin-right: 0 !important;
+}
+
 div[data-testid="metric-container"],
 div[data-testid="stMetric"],
 [data-testid="stMetric"] {
     background: #122A40 !important;
+    background-color: #122A40 !important;
     border: 1px solid #2B526F !important;
     border-radius: 10px !important;
     padding: 14px 16px !important;
     box-shadow: 0 8px 22px rgba(0,0,0,0.22) !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
 }
 
 div[data-testid="metric-container"] *,
