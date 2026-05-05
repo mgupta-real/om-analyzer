@@ -977,9 +977,6 @@ def _cover(ws, row, line1, line2, n=14):
     _fr(ws, row, n, C_HDR)
     _sc(ws, row, 1, line1, bold=True, bg=C_HDR, fg=C_HDR_TEXT, size=13)
     ws.row_dimensions[row].height = 28; row += 1
-    _fr(ws, row, n, C_HDR2)
-    _sc(ws, row, 1, line2, bg=C_HDR2, fg=C_HDR_TEXT, size=9)
-    ws.row_dimensions[row].height = 15; row += 1
     return _sp(ws, row)
 
 
@@ -1711,6 +1708,42 @@ def build_excel(d: dict, filename: str, sections: dict = None) -> bytes:
         bg=C_ALT, fg="FF888880", size=8, italic=True)
     ws3.row_dimensions[r].height = 13
 
+    # ── Auto-adjust row heights based on content length & column width ──
+    def _auto_fit_rows(ws):
+        col_widths = {}
+        for letter, dim in ws.column_dimensions.items():
+            if dim.width:
+                col_widths[letter] = dim.width
+        for row_cells in ws.iter_rows():
+            r_idx = row_cells[0].row
+            existing = ws.row_dimensions[r_idx].height
+            if r_idx == 1:
+                continue
+            max_lines = 1
+            for cell in row_cells:
+                val = cell.value
+                if val is None or val == "":
+                    continue
+                text = str(val)
+                col_letter = cell.column_letter
+                col_w = col_widths.get(col_letter, 12)
+                chars_per_line = max(int(col_w * 1.1), 8)
+                lines_for_cell = 0
+                for segment in text.split("\n"):
+                    seg_len = len(segment)
+                    if seg_len == 0:
+                        lines_for_cell += 1
+                    else:
+                        lines_for_cell += max(1, -(-seg_len // chars_per_line))
+                if lines_for_cell > max_lines:
+                    max_lines = lines_for_cell
+            target = min(max(14, max_lines * 14 + 2), 80)
+            if existing is None or target > existing:
+                ws.row_dimensions[r_idx].height = target
+
+    for sheet in wb.worksheets:
+        _auto_fit_rows(sheet)
+
     buf = io.BytesIO()
     wb.save(buf)
     return buf.getvalue()
@@ -1857,6 +1890,17 @@ with main_col:
     with _upload_col:
         uploaded = st.file_uploader("Drop your OM PDF here", type=["pdf"], label_visibility="collapsed")
 
+    # ── Detect new file upload and clear previous results ─────────────────
+    _current_file_id = None
+    if uploaded is not None:
+        _current_file_id = f"{uploaded.name}_{uploaded.size}"
+    _last_file_id = st.session_state.get("uploaded_file_id")
+    if _current_file_id != _last_file_id:
+        for _k in ("analysis_data", "analysis_excel_bytes", "analysis_filename",
+                   "analysis_prop_name", "analysis_broker_name"):
+            st.session_state.pop(_k, None)
+        st.session_state["uploaded_file_id"] = _current_file_id
+
     if uploaded is None:
         st.markdown("""
 <div style="padding: 0 44px;">
@@ -1920,6 +1964,13 @@ with main_col:
             set_progress(100, "Done!")
             progress_bar.empty(); status_box.empty()
 
+            # ── Cache results in session_state so they survive reruns ──
+            st.session_state["analysis_data"]        = data
+            st.session_state["analysis_excel_bytes"] = excel_bytes
+            st.session_state["analysis_filename"]    = uploaded.name
+            st.session_state["analysis_prop_name"]   = (data.get("property") or {}).get("name") or "Property"
+            st.session_state["analysis_broker_name"] = (data.get("broker")   or {}).get("name") or "Unknown broker"
+
         except Exception as e:
             progress_bar.empty(); status_box.empty()
             st.error(f"**Error:** {e}")
@@ -1927,8 +1978,15 @@ with main_col:
                 import traceback; st.code(traceback.format_exc())
             st.stop()
 
-        prop_name   = (data.get("property") or {}).get("name") or "Property"
-        broker_name = (data.get("broker")   or {}).get("name") or "Unknown broker"
+    # ══════════════════════════════════════════════════════════════════════
+    # ── Results block — renders whenever cached analysis exists ──
+    # Lives OUTSIDE the analyze button so download clicks don't wipe it
+    # ══════════════════════════════════════════════════════════════════════
+    if "analysis_data" in st.session_state:
+        data         = st.session_state["analysis_data"]
+        excel_bytes  = st.session_state["analysis_excel_bytes"]
+        prop_name    = st.session_state["analysis_prop_name"]
+        broker_name  = st.session_state["analysis_broker_name"]
 
         st.markdown(f"""
 <div style="padding: 0 44px;">
@@ -1940,13 +1998,184 @@ with main_col:
 """, unsafe_allow_html=True)
 
         safe = re.sub(r"[^a-zA-Z0-9_\- ]", "", prop_name).strip().replace(" ", "_")
-        st.download_button(
-            label="⬇️  Download Underwriting Report (.xlsx)",
-            data=excel_bytes,
-            file_name=f"{safe}_Underwriting_Report.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            use_container_width=True,
-        )
+
+        # ── Build "all summary tabs" multi-sheet workbook (Fix 4) ──
+        def _build_summary_tabs_workbook(d: dict) -> bytes:
+            """One xlsx with every in-app summary tab as a separate sheet."""
+            import pandas as pd
+            from openpyxl import Workbook
+            from openpyxl.styles import Font, PatternFill, Alignment
+            from openpyxl.utils.dataframe import dataframe_to_rows
+
+            wb_s = Workbook()
+            wb_s.remove(wb_s.active)
+            hdr_fill = PatternFill("solid", fgColor="FF1DC9A4")
+            hdr_font = Font(bold=True, color="FF0D1B2A", size=11)
+            cell_font = Font(color="FF3E3E3E", size=10)
+
+            def _add_sheet(name, df):
+                if df is None or df.empty:
+                    df = pd.DataFrame([{"Note": f"No {name.lower()} data extracted."}])
+                ws_s = wb_s.create_sheet(name[:31])
+                for r_idx, row in enumerate(dataframe_to_rows(df, index=False, header=True), 1):
+                    for c_idx, val in enumerate(row, 1):
+                        c = ws_s.cell(row=r_idx, column=c_idx, value=val)
+                        if r_idx == 1:
+                            c.fill = hdr_fill
+                            c.font = hdr_font
+                            c.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+                        else:
+                            c.font = cell_font
+                            c.alignment = Alignment(vertical="center", wrap_text=True)
+                for col_idx, col_cells in enumerate(ws_s.columns, 1):
+                    max_len = 10
+                    for c in col_cells:
+                        if c.value is not None:
+                            max_len = max(max_len, min(len(str(c.value)), 60))
+                    ws_s.column_dimensions[get_column_letter(col_idx)].width = max_len + 2
+                ws_s.row_dimensions[1].height = 22
+
+            # Unit Mix
+            umix_x = d.get("unit_mix") or []
+            df_um = pd.DataFrame([{
+                "Type": u.get("type"), "Plan": u.get("plan"), "Units": u.get("count"),
+                "SF": u.get("sf"), "Market Rent": u.get("market_rent"),
+                "Eff. Rent": u.get("eff_rent"), "Target Rent": u.get("target_rent"),
+                "Upside/Unit": u.get("upside"),
+            } for u in umix_x]) if umix_x else pd.DataFrame()
+            _add_sheet("Unit Mix", df_um)
+
+            # Value-Add Floor Plans
+            va_x = d.get("value_add") or {}
+            va_plans_x = va_x.get("by_floor_plan") or []
+            df_va = pd.DataFrame([{
+                "Type": p.get("type"), "SF": p.get("sf"), "Units": p.get("units"),
+                "In-Place Rent": p.get("inplace_rent"), "Rehab Cost": p.get("rehab_cost"),
+                "Premium/Unit": p.get("premium"), "Post-Rehab Rent": p.get("post_rehab_rent"),
+            } for p in va_plans_x]) if va_plans_x else pd.DataFrame()
+            _add_sheet("Value-Add Floor Plans", df_va)
+
+            # Value-Add Levers
+            levers_x = d.get("value_add_levers") or []
+            df_lv = pd.DataFrame([{
+                "Lever": lv.get("lever"), "Units": lv.get("units"),
+                "Mo. Premium": lv.get("monthly_premium"),
+                "Annual Upside": lv.get("annual_upside"), "Notes": lv.get("notes"),
+            } for lv in levers_x]) if levers_x else pd.DataFrame()
+            _add_sheet("Value-Add Levers", df_lv)
+
+            # Rent Comps
+            rg_x     = d.get("rent_comps_garden")    or []
+            rth_x    = d.get("rent_comps_townhouse") or []
+            rcomps_x = d.get("rent_comps")           or []
+            all_comps = []
+            for c in rg_x:
+                all_comps.append({"Property": c.get("name"), "Type": "Garden",
+                                  "Rent": c.get("rent"), "Notes": c.get("notes")})
+            for c in rth_x:
+                all_comps.append({"Property": c.get("name"), "Type": "Townhouse",
+                                  "Rent": c.get("rent"), "Notes": c.get("notes")})
+            for c in rcomps_x:
+                all_comps.append({"Property": c.get("name"), "Type": c.get("comp_type"),
+                                  "Built": c.get("year_built"), "Units": c.get("units"),
+                                  "Occ": c.get("occupancy"),
+                                  "Mkt Rent": c.get("total_market"),
+                                  "Eff Rent": c.get("total_eff"),
+                                  "Avg SF": c.get("avg_sf")})
+            _add_sheet("Rent Comps", pd.DataFrame(all_comps))
+
+            # Financials
+            fin_x = d.get("financials") or {}
+            periods_x = fin_x.get("periods") or []
+            inc_x     = fin_x.get("income_lines") or []
+            exp_x     = fin_x.get("expense_lines") or []
+            noi_x     = fin_x.get("noi") or {}
+            fin_rows = []
+            for line in inc_x + exp_x:
+                row = {"Line Item": line.get("item")}
+                for p in periods_x:
+                    row[p] = (line.get("values") or {}).get(p)
+                fin_rows.append(row)
+            if noi_x:
+                row = {"Line Item": "NET OPERATING INCOME"}
+                for p in periods_x:
+                    row[p] = noi_x.get(p)
+                fin_rows.append(row)
+            _add_sheet("Financials", pd.DataFrame(fin_rows))
+
+            # Tax & Abatement
+            tax_x = d.get("tax") or {}
+            tax_rows = [{"Field": k.replace("_", " ").title(), "Value": v}
+                        for k, v in tax_x.items() if v is not None and v != ""]
+            _add_sheet("Tax & Abatement", pd.DataFrame(tax_rows))
+
+            # Demographics
+            demo_x = d.get("demographics") or {}
+            demo_rows = []
+            metric_pairs = [
+                ("Population (2025)", "pop_1mi", "pop_3mi", "pop_5mi"),
+                ("Population (2030)", "pop_2030_1mi", "pop_2030_3mi", "pop_2030_5mi"),
+                ("Median Income (2025)", "median_income_1mi", "median_income_3mi", "median_income_5mi"),
+                ("Median Income (2030)", "median_income_2030_1mi", "median_income_2030_3mi", "median_income_2030_5mi"),
+                ("Income Growth", "income_growth_1mi", "income_growth_3mi", "income_growth_5mi"),
+                ("Renter %", "renter_pct_1mi", "renter_pct_3mi", "renter_pct_5mi"),
+                ("College %", "college_pct_1mi", "college_pct_3mi", "college_pct_5mi"),
+                ("White Collar %", "white_collar_pct_1mi", "white_collar_pct_3mi", "white_collar_pct_5mi"),
+            ]
+            for label, k1, k3, k5 in metric_pairs:
+                demo_rows.append({"Metric": label,
+                                  "1-Mile": demo_x.get(k1),
+                                  "3-Mile": demo_x.get(k3),
+                                  "5-Mile": demo_x.get(k5)})
+            _add_sheet("Demographics", pd.DataFrame(demo_rows))
+
+            # Financing
+            fin_i_x = d.get("financing") or {}
+            nf_i_x  = fin_i_x.get("new_financing")  or {}
+            asd_i_x = fin_i_x.get("assumable_debt") or {}
+            fin_field_rows = [{"Field": "Offering Type", "Value": fin_i_x.get("offering_type")}]
+            for label, src in [("Assumable Debt", asd_i_x), ("New Financing", nf_i_x)]:
+                if any(src.get(k) for k in ["lender", "loan_amount", "interest_rate", "loan_type"]):
+                    fin_field_rows.append({"Field": "—" * 8, "Value": label})
+                    for k, v in src.items():
+                        if v is not None and v != "":
+                            fin_field_rows.append({"Field": k.replace("_", " ").title(), "Value": v})
+            _add_sheet("Financing", pd.DataFrame(fin_field_rows))
+
+            # Flags
+            flags_x = d.get("flags") or []
+            df_flags = pd.DataFrame([{
+                "Category": fl.get("category"),
+                "Title": fl.get("title"),
+                "Detail": fl.get("detail"),
+            } for fl in flags_x]) if flags_x else pd.DataFrame()
+            _add_sheet("Flags", df_flags)
+
+            buf_s = io.BytesIO()
+            wb_s.save(buf_s)
+            return buf_s.getvalue()
+
+        # ── Download buttons row: full report + summary tabs ──
+        dlc1, dlc2 = st.columns(2)
+        with dlc1:
+            st.download_button(
+                label="⬇️  Download Full Underwriting Report (.xlsx)",
+                data=excel_bytes,
+                file_name=f"{safe}_Underwriting_Report.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True,
+                key="dl_full_report",
+            )
+        with dlc2:
+            summary_xlsx = _build_summary_tabs_workbook(data)
+            st.download_button(
+                label="📊  Download All Summary Tabs (.xlsx)",
+                data=summary_xlsx,
+                file_name=f"{safe}_Summary_Tabs.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True,
+                key="dl_summary_tabs",
+            )
 
         st.markdown("<div style='margin-top:24px;'>", unsafe_allow_html=True)
         pd_  = data.get("property")   or {}
