@@ -791,18 +791,18 @@ def analyze_om(pdf_text: str, api_key: str, progress_cb=None) -> dict:
     if progress_cb:
         progress_cb("Sending to Claude AI for analysis...")
 
-    client = anthropic.Anthropic(
-        api_key=api_key,
-        http_client=httpx.Client(timeout=httpx.Timeout(600.0, connect=30.0))
-    )
-
+    # Use context manager so the http client is closed cleanly each call.
+    # Timeout shortened to 180s so it fails fast instead of letting the
+    # Streamlit Cloud websocket time out first.
     def _call(prompt_text, max_tok, system_text):
-        resp = client.messages.create(
-            model="claude-haiku-4-5-20251001",
-            max_tokens=max_tok,
-            system=system_text,
-            messages=[{"role": "user", "content": prompt_text}]
-        )
+        with httpx.Client(timeout=httpx.Timeout(180.0, connect=15.0)) as hc:
+            client = anthropic.Anthropic(api_key=api_key, http_client=hc)
+            resp = client.messages.create(
+                model="claude-haiku-4-5-20251001",
+                max_tokens=max_tok,
+                system=system_text,
+                messages=[{"role": "user", "content": prompt_text}]
+            )
         raw = resp.content[0].text.strip()
         raw = re.sub(r"^```[a-z]*\n?", "", raw).rstrip("`").strip()
         return raw, resp.stop_reason
@@ -2015,10 +2015,22 @@ with main_col:
 
         except Exception as e:
             progress_bar.empty(); status_box.empty()
-            st.error(f"**Error:** {e}")
-            with st.expander("Full traceback"):
-                import traceback; st.code(traceback.format_exc())
-            st.stop()
+            import traceback
+            tb = traceback.format_exc()
+            # Persist to session_state so it survives reruns / websocket drops.
+            # The error renders OUTSIDE this button block so it can't be hidden
+            # by st.stop() or by the websocket dying mid-traceback.
+            st.session_state["last_error"] = f"{type(e).__name__}: {e}\n\n{tb}"
+
+    # ══════════════════════════════════════════════════════════════════════
+    # ── Persistent error display — shows even after a websocket drop ──
+    # ══════════════════════════════════════════════════════════════════════
+    if "last_error" in st.session_state:
+        st.error("⚠️ The last analysis hit an error:")
+        st.code(st.session_state["last_error"], language="python")
+        if st.button("Dismiss error", key="dismiss_err"):
+            del st.session_state["last_error"]
+            st.rerun()
 
     # ══════════════════════════════════════════════════════════════════════
     # ── Results block — renders whenever cached analysis exists ──
