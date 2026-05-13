@@ -1964,7 +1964,16 @@ with main_col:
 </div>
 """, unsafe_allow_html=True)
 
+    # ── DIAGNOSTIC: shows current session state at top of every run ──
+    _diag_box = st.container()
+    with _diag_box:
+        _has_data  = "analysis_data" in st.session_state
+        _has_err   = "last_error" in st.session_state
+        _has_xlsx  = "analysis_excel_bytes" in st.session_state
+        st.info(f"🔍 DIAG: analysis_data={_has_data} | last_error={_has_err} | excel_bytes={_has_xlsx}")
+
     if st.button("🔍  Analyze Offering Memorandum", type="primary", use_container_width=True):
+        st.warning("🟡 DIAG: Analyze button clicked — entering try block")
         progress_bar = st.progress(0, text="Starting...")
         status_box   = st.empty()
 
@@ -1981,6 +1990,7 @@ with main_col:
                 tmp_path = tmp.name
             pdf_text = extract_pdf_text(tmp_path)
             os.unlink(tmp_path)
+            st.warning(f"🟡 DIAG: PDF extracted, {len(pdf_text)} chars")
 
             if not pdf_text or len(pdf_text.strip()) < 200:
                 progress_bar.empty(); status_box.empty()
@@ -1989,7 +1999,10 @@ with main_col:
 
             set_progress(30, f"Extracted {len(pdf_text):,} characters. Sending to Claude AI…")
             def log(msg): set_progress(55, msg)
+            st.warning("🟡 DIAG: about to call Claude API...")
             data = analyze_om(pdf_text, api_key, log)
+            st.warning(f"🟡 DIAG: Claude returned, type={type(data).__name__}, keys={list(data.keys())[:5] if isinstance(data, dict) else 'NOT A DICT'}")
+
             set_progress(75, "Generating Excel report…")
             sections = {
                 "deal":      sel_deal,     "unitmix":   sel_unitmix,
@@ -2002,7 +2015,9 @@ with main_col:
                 "afford":    sel_afford,   "schools":   sel_schools,
                 "employers": sel_employers,"market":    sel_market,
             }
+            st.warning("🟡 DIAG: about to build Excel...")
             excel_bytes = build_excel(data, uploaded.name, sections=sections)
+            st.warning(f"🟡 DIAG: Excel built, {len(excel_bytes)} bytes")
             set_progress(100, "Done!")
             progress_bar.empty(); status_box.empty()
 
@@ -2012,15 +2027,14 @@ with main_col:
             st.session_state["analysis_filename"]    = uploaded.name
             st.session_state["analysis_prop_name"]   = (data.get("property") or {}).get("name") or "Property"
             st.session_state["analysis_broker_name"] = (data.get("broker")   or {}).get("name") or "Unknown broker"
+            st.success("🟢 DIAG: session_state populated successfully — results should render below")
 
         except Exception as e:
             progress_bar.empty(); status_box.empty()
             import traceback
             tb = traceback.format_exc()
-            # Persist to session_state so it survives reruns / websocket drops.
-            # The error renders OUTSIDE this button block so it can't be hidden
-            # by st.stop() or by the websocket dying mid-traceback.
             st.session_state["last_error"] = f"{type(e).__name__}: {e}\n\n{tb}"
+            st.error(f"🔴 DIAG: caught exception — {type(e).__name__}: {e}")
 
     # ══════════════════════════════════════════════════════════════════════
     # ── Persistent error display — shows even after a websocket drop ──
