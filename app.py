@@ -29,11 +29,12 @@ import base64, pathlib
 # ─── Logo loader (caches base64 of the brand logo for embedding) ──────────────
 @st.cache_data
 def _load_logo_b64():
-    """Load RealVal logo (white wordmark variant for dark navbar) as base64."""
+    """Load the RV mark (teal only, no wordmark) as base64.
+    The 'REALVAL' wordmark is rendered as separate HTML text in the navbar."""
     try:
-        p = pathlib.Path(__file__).parent / "assets" / "realval_logo_navwhite.png"
+        p = pathlib.Path(__file__).parent / "assets" / "realval_mark.png"
         if not p.exists():
-            p = pathlib.Path(__file__).parent / "assets" / "realval_logo_transparent.png"
+            p = pathlib.Path(__file__).parent / "assets" / "realval_logo_navwhite.png"
         if not p.exists():
             p = pathlib.Path(__file__).parent / "assets" / "realval_logo.png"
         if p.exists():
@@ -80,8 +81,24 @@ html, body, [class*="css"], .stApp, .main {{
     border-bottom: 1px solid #1A1A1A;
 }}
 .rv-nav-left {{ display: flex; align-items: center; gap: 14px; }}
-.rv-nav-left a {{ display: flex; align-items: center; text-decoration: none; }}
-.rv-nav-left img {{ height: 32px; width: auto; display: block; }}
+.rv-brand {{
+    display: flex; align-items: center; gap: 10px;
+    text-decoration: none;
+}}
+.rv-mark {{
+    height: 32px; width: auto; display: block;
+}}
+.rv-mark-fallback {{
+    color: #02A9A1; font-weight: 500; font-size: 22px;
+    letter-spacing: 0.5px;
+}}
+.rv-wordmark {{
+    color: #FFFFFF;
+    font-size: 18px;
+    font-weight: 500;
+    letter-spacing: 2.5px;
+    line-height: 1;
+}}
 .rv-nav-tagline {{
     color: #02A9A1;
     font-size: 11px;
@@ -105,12 +122,107 @@ html, body, [class*="css"], .stApp, .main {{
     color: #D1D5DB; font-size: 12px;
 }}
 .rv-user-chip-avatar {{
-    width: 28px; height: 28px; border-radius: 50%;
+    width: 30px; height: 30px; border-radius: 50%;
     background: #1F1F1F; color: #02A9A1;
     display: flex; align-items: center; justify-content: center;
     font-size: 11px; font-weight: 500;
     border: 1px solid #2A2A2A;
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
 }}
+.rv-user-chip-avatar:hover {{
+    border-color: #02A9A1;
+    background: #2A2A2A;
+}}
+
+/* ═════════════════════════════════════════════════════════════════════════
+   PROFILE DROPDOWN — click avatar → menu with email + Sign out
+   Uses native <details>/<summary> so no JS needed; closes on outside click
+   ═══════════════════════════════════════════════════════════════════════ */
+.rv-profile {{
+    position: relative;
+    display: inline-block;
+}}
+.rv-profile-trigger {{
+    list-style: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+}}
+.rv-profile-trigger::-webkit-details-marker {{ display: none; }}
+.rv-profile-trigger::marker {{ display: none; content: ""; }}
+details[open] .rv-user-chip-avatar {{
+    border-color: #02A9A1;
+    background: #2A2A2A;
+}}
+.rv-profile-menu {{
+    position: absolute;
+    top: calc(100% + 8px);
+    right: 0;
+    min-width: 240px;
+    background: #FFFFFF;
+    border: 1px solid #E5E7EB;
+    border-radius: 10px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.12), 0 2px 4px rgba(0,0,0,0.06);
+    z-index: 9999;
+    padding: 4px 0;
+    overflow: hidden;
+}}
+.rv-profile-header {{
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 14px 10px;
+}}
+.rv-profile-avatar-lg {{
+    width: 36px; height: 36px; border-radius: 50%;
+    background: #02A9A1; color: #FFFFFF;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 13px; font-weight: 500;
+    flex-shrink: 0;
+}}
+.rv-profile-info {{ min-width: 0; flex: 1; }}
+.rv-profile-name {{
+    color: #0A0A0A;
+    font-size: 13px;
+    font-weight: 500;
+    line-height: 1.3;
+    text-transform: capitalize;
+}}
+.rv-profile-email {{
+    color: #6B7280;
+    font-size: 11px;
+    line-height: 1.3;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}}
+.rv-profile-divider {{
+    height: 1px;
+    background: #F3F4F6;
+    margin: 4px 0;
+}}
+.rv-profile-item,
+.rv-profile-item:visited,
+.rv-profile-item:hover,
+.rv-profile-item:active {{
+    display: block;
+    padding: 9px 14px;
+    color: #374151 !important;
+    font-size: 13px;
+    text-decoration: none !important;
+    cursor: pointer;
+    transition: background 0.1s;
+}}
+.rv-profile-item:hover {{ background: #F9FAFB; }}
+.rv-profile-item svg {{ color: inherit; stroke: currentColor; }}
+.rv-profile-item-danger,
+.rv-profile-item-danger:visited,
+.rv-profile-item-danger:hover,
+.rv-profile-item-danger:active {{
+    color: #B91C1C !important;
+}}
+.rv-profile-item-danger:hover {{ background: #FEF2F2 !important; color: #991B1B !important; }}
 
 /* ═════════════════════════════════════════════════════════════════════════
    HERO — clean upload area, centered, gold-standard whitespace
@@ -378,6 +490,37 @@ html, body, [class*="css"], .stApp, .main {{
 
 /* Progress bar */
 .stProgress > div > div > div > div {{ background: #02A9A1 !important; }}
+
+/* ═════════════════════════════════════════════════════════════════════════
+   FLAG CARDS — in-app Flags tab rendering
+   Each flag = colored left border + soft tinted bg + bold title + body text.
+   Color-coded by category: warn=amber, good=green, verify=purple, info=blue
+   ═══════════════════════════════════════════════════════════════════════ */
+.flag-warn, .flag-good, .flag-verify, .flag-info {{
+    background: #FFFFFF;
+    border: 1px solid #E5E7EB;
+    border-left: 4px solid #9CA3AF;
+    border-radius: 8px;
+    padding: 14px 18px;
+    margin: 0 0 12px 0;
+}}
+.flag-warn   {{ border-left-color: #D97706; background: #FFFBEB; }}   /* amber */
+.flag-good   {{ border-left-color: #059669; background: #F0FDF4; }}   /* green */
+.flag-verify {{ border-left-color: #7C3AED; background: #F5F3FF; }}   /* purple */
+.flag-info   {{ border-left-color: #02A9A1; background: #F0FBF9; }}   /* brand teal */
+
+.flag-title {{
+    color: #0A0A0A;
+    font-size: 14px;
+    font-weight: 600;
+    margin-bottom: 6px;
+    line-height: 1.3;
+}}
+.flag-body {{
+    color: #374151;
+    font-size: 13px;
+    line-height: 1.55;
+}}
 
 /* Footer */
 .rv-footer {{
@@ -2080,29 +2223,53 @@ if st.session_state.get("user"):
 _avatar_initials = "".join(p[0].upper() for p in (_user_email.split("@")[0] or "U").replace(".", " ").split()[:2]) or "U"
 
 _logo_img_tag = (
-    f'<img src="data:image/png;base64,{_LOGO_B64}" alt="RealVal" />'
+    f'<img src="data:image/png;base64,{_LOGO_B64}" alt="RV" class="rv-mark" />'
     if _LOGO_B64 else
-    '<span style="color:#02A9A1;font-weight:500;font-size:18px;">RealVal</span>'
+    '<span class="rv-mark-fallback">RV</span>'
 )
 
 st.markdown(f"""
 <div class="rv-nav">
   <div class="rv-nav-left">
-    <a href="https://therealval.com/" target="_blank" rel="noopener">
+    <a href="https://therealval.com/" target="_blank" rel="noopener" class="rv-brand">
       {_logo_img_tag}
+      <span class="rv-wordmark">REALVAL</span>
     </a>
     <span class="rv-nav-tagline">OM Intelligence</span>
   </div>
   <div class="rv-nav-right">
     <span class="rv-nav-link active">Analyze</span>
-    <span class="rv-nav-link" style="opacity:0.5;cursor:not-allowed;" title="Coming soon">History</span>
-    <div class="rv-user-chip">
-      <span>{_user_email}</span>
-      <div class="rv-user-chip-avatar">{_avatar_initials}</div>
-    </div>
+    <details class="rv-profile">
+      <summary class="rv-profile-trigger" aria-label="Account menu">
+        <div class="rv-user-chip-avatar">{_avatar_initials}</div>
+      </summary>
+      <div class="rv-profile-menu">
+        <div class="rv-profile-header">
+          <div class="rv-profile-avatar-lg">{_avatar_initials}</div>
+          <div class="rv-profile-info">
+            <div class="rv-profile-name">{_user_email.split('@')[0] if _user_email else 'User'}</div>
+            <div class="rv-profile-email">{_user_email}</div>
+          </div>
+        </div>
+        <div class="rv-profile-divider"></div>
+        <a href="?signout=1" class="rv-profile-item rv-profile-item-danger">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" style="vertical-align:middle;margin-right:8px;">
+            <path d="M6 14H3.5C2.67 14 2 13.33 2 12.5v-9C2 2.67 2.67 2 3.5 2H6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+            <path d="M10.5 11L14 8L10.5 5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M14 8H6.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+          </svg>
+          Sign out
+        </a>
+      </div>
+    </details>
   </div>
 </div>
 """, unsafe_allow_html=True)
+
+# Handle sign-out triggered by the profile-menu link (?signout=1)
+if st.query_params.get("signout") == "1":
+    st.query_params.clear()
+    logout()
 
 # ═══════════════════════════════════════════════════════════════════════════
 # SECTION FLAGS — same keys/state as before, just defaulted on
@@ -2122,11 +2289,8 @@ def _cb_desall():
     for k in _keys:
         st.session_state["sel_"+k] = False
 
-# Sign-out lives in the sidebar (kept simple, off-canvas)
-with st.sidebar:
-    st.markdown(f"**Signed in as**  \n`{_user_email}`")
-    if st.button("Sign Out", key="btn_signout_side", use_container_width=True):
-        logout()
+# Sidebar reserved for future (History, Settings). Kept collapsed by default.
+# Sign-out moved to the profile dropdown menu in the navbar.
 
 # ═══════════════════════════════════════════════════════════════════════════
 # HERO — single centred upload area with title, subtitle, and dropzone
@@ -2155,11 +2319,57 @@ uploaded = st.file_uploader("Drop your OM PDF here", type=["pdf"], label_visibil
 # ═══════════════════════════════════════════════════════════════════════════
 # CUSTOMIZE REPORT — expander replaces the right-column wall of checkboxes
 # ═══════════════════════════════════════════════════════════════════════════
+# ═══════════════════════════════════════════════════════════════════════════
+# CUSTOMIZE REPORT — staged changes pattern
+# Checkboxes write to tmp_sel_* keys; Save copies them to the real sel_* keys.
+# Until Save is clicked, the actual report selection is unchanged.
+# ═══════════════════════════════════════════════════════════════════════════
 def _cb(key, label):
-    st.checkbox(label, key=key)
+    # Bind to tmp_* widget so the real sel_* stays until Save commits
+    tmp_key = "tmp_" + key
+    if tmp_key not in st.session_state:
+        st.session_state[tmp_key] = st.session_state.get(key, True)
+    st.checkbox(label, key=tmp_key)
 
-_n_sel = sum(st.session_state.get("sel_"+k, True) for k in _keys)
-with st.expander(f"⚙  Customize report  ·  {_n_sel} of 18 sections selected", expanded=False):
+def _commit_selections():
+    """Copy staged tmp_sel_* values into the real sel_* keys."""
+    for _kk in _keys:
+        _real = "sel_" + _kk
+        _tmp  = "tmp_sel_" + _kk
+        if _tmp in st.session_state:
+            st.session_state[_real] = st.session_state[_tmp]
+    st.session_state["_customize_saved_flash"] = True
+
+def _stage_selall():
+    for _kk in _keys:
+        st.session_state["tmp_sel_" + _kk] = True
+
+def _stage_desall():
+    for _kk in _keys:
+        st.session_state["tmp_sel_" + _kk] = False
+
+# Count of staged selections (what the user is choosing right now)
+_n_staged = sum(
+    st.session_state.get("tmp_sel_" + k,
+                          st.session_state.get("sel_" + k, True))
+    for k in _keys
+)
+# Count of committed selections (what will actually run)
+_n_committed = sum(st.session_state.get("sel_" + k, True) for k in _keys)
+# Detect unsaved diff
+_unsaved = any(
+    st.session_state.get("tmp_sel_" + k,
+                          st.session_state.get("sel_" + k, True))
+    != st.session_state.get("sel_" + k, True)
+    for k in _keys
+)
+
+_label_suffix = (
+    f"{_n_staged} of 18 staged"
+    + ("  ·  unsaved changes" if _unsaved else "")
+)
+
+with st.expander(f"⚙  Customize report  ·  {_label_suffix}", expanded=_unsaved):
     cust_c1, cust_c2, cust_c3 = st.columns(3)
     with cust_c1:
         st.markdown('<div class="rv-cust-group-title">Financials Tab</div>', unsafe_allow_html=True)
@@ -2186,9 +2396,27 @@ with st.expander(f"⚙  Customize report  ·  {_n_sel} of 18 sections selected",
         _cb("sel_schools",   "Schools, crime & quality of life")
         _cb("sel_employers", "Major employers & economic drivers")
         _cb("sel_market",    "Market, submarket & supply/demand")
-    sa1, sa2, _ = st.columns([0.18, 0.18, 0.64])
-    with sa1: st.button("✓  Select all",  key="btn_sel", on_click=_cb_selall, use_container_width=True)
-    with sa2: st.button("✕  Deselect all", key="btn_des", on_click=_cb_desall, use_container_width=True)
+
+    st.markdown('<div style="height:8px;"></div>', unsafe_allow_html=True)
+    sa1, sa2, sa3, sa4 = st.columns([0.18, 0.18, 0.30, 0.34])
+    with sa1: st.button("✓  Select all",   key="btn_sel", on_click=_stage_selall, use_container_width=True)
+    with sa2: st.button("✕  Deselect all", key="btn_des", on_click=_stage_desall, use_container_width=True)
+    with sa4:
+        st.button(
+            "💾  Save changes" if _unsaved else "✓  Saved",
+            key="btn_save_cust",
+            type="primary" if _unsaved else "secondary",
+            on_click=_commit_selections,
+            use_container_width=True,
+            disabled=not _unsaved,
+        )
+
+    # Flash success message after save
+    if st.session_state.pop("_customize_saved_flash", False):
+        st.markdown(
+            '<div style="margin-top:8px;color:#02A9A1;font-size:12px;">✓ Selections saved.</div>',
+            unsafe_allow_html=True
+        )
 
 sel_deal=st.session_state["sel_deal"]; sel_unitmix=st.session_state["sel_unitmix"]
 sel_opstat=st.session_state["sel_opstat"]; sel_valueadd=st.session_state["sel_valueadd"]
@@ -2278,6 +2506,8 @@ if True:
                                           type="primary",
                                           use_container_width=True,
                                           key="btn_analyze_main")
+        # Breathing room below the Analyze button
+        st.markdown('<div style="height:48px;"></div>', unsafe_allow_html=True)
     else:
         _analyze_clicked = False
 
