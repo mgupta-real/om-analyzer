@@ -7,7 +7,12 @@ from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
 
-st.set_page_config(page_title="OM Analyzer", page_icon="🏢", layout="wide")
+st.set_page_config(
+    page_title="OM Analyzer · RealVal",
+    page_icon="🏢",
+    layout="wide",
+    initial_sidebar_state="collapsed"
+)
 
 # ══════════════════════════════════════════════════════════════════════════════
 # AUTH GATE — must come right after set_page_config
@@ -18,433 +23,383 @@ if "user" not in st.session_state:
     st.stop()
 # ══════════════════════════════════════════════════════════════════════════════
 
-st.markdown("""
+
+import base64, pathlib
+
+# ─── Logo loader (caches base64 of the brand logo for embedding) ──────────────
+@st.cache_data
+def _load_logo_b64():
+    """Load RealVal logo (white wordmark variant for dark navbar) as base64."""
+    try:
+        p = pathlib.Path(__file__).parent / "assets" / "realval_logo_navwhite.png"
+        if not p.exists():
+            p = pathlib.Path(__file__).parent / "assets" / "realval_logo_transparent.png"
+        if not p.exists():
+            p = pathlib.Path(__file__).parent / "assets" / "realval_logo.png"
+        if p.exists():
+            return base64.b64encode(p.read_bytes()).decode("ascii")
+    except Exception:
+        pass
+    return ""
+
+_LOGO_B64 = _load_logo_b64()
+
+st.markdown(f"""
 <style>
-#MainMenu, footer, header {visibility: hidden;}
-html, body, [class*="css"], .stApp, .main {
-    background-color: #0D1B2A !important; color: #E0E6EF !important;
-}
-.block-container {
-    padding-top: 0 !important; max-width: 100% !important;
-    padding-left: 0 !important; padding-right: 0 !important;
-    background: #0D1B2A !important;
-}
-section[data-testid="stSidebar"] { display: none !important; }
-.rv-navbar {
-    background: #0B1929; border-bottom: 1px solid #1E3148;
-    padding: 0 48px; height: 130px;
-    display: flex; align-items: center; justify-content: space-between;
-    position: sticky; top: 0; z-index: 999;
-}
-.rv-logo-block { display: flex; align-items: center; gap: 20px; }
-.rv-logo-icon {
-    width: 80px; height: 80px; background: #1DC9A4; border-radius: 20px;
+/* ═════════════════════════════════════════════════════════════════════════
+   REALVAL OM INTELLIGENCE — Streamlit theme
+   Brand:  black + teal (#02A9A1) + warm white
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* Hide Streamlit chrome */
+#MainMenu, footer, header {{ visibility: hidden; height: 0 !important; }}
+
+/* Base — clean white app surface */
+html, body, [class*="css"], .stApp, .main {{
+    background-color: #FAFAFA !important;
+    color: #0A0A0A !important;
+    font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', sans-serif !important;
+}}
+
+.block-container {{
+    padding: 0 !important;
+    max-width: 100% !important;
+    background: #FAFAFA !important;
+}}
+
+/* ═════════════════════════════════════════════════════════════════════════
+   NAVBAR — black, slim, logo-only top-left, clean nav, user chip top-right
+   ═══════════════════════════════════════════════════════════════════════ */
+.rv-nav {{
+    background: #0A0A0A;
+    padding: 0 36px;
+    height: 64px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid #1A1A1A;
+}}
+.rv-nav-left {{ display: flex; align-items: center; gap: 14px; }}
+.rv-nav-left a {{ display: flex; align-items: center; text-decoration: none; }}
+.rv-nav-left img {{ height: 32px; width: auto; display: block; }}
+.rv-nav-tagline {{
+    color: #02A9A1;
+    font-size: 11px;
+    padding: 3px 10px;
+    border: 1px solid #02A9A1;
+    border-radius: 4px;
+    letter-spacing: 0.4px;
+    text-transform: uppercase;
+    font-weight: 500;
+    margin-left: 8px;
+}}
+.rv-nav-right {{ display: flex; align-items: center; gap: 24px; }}
+.rv-nav-link {{
+    color: #9CA3AF;
+    font-size: 13px;
+    text-decoration: none;
+}}
+.rv-nav-link.active {{ color: #FFFFFF; border-bottom: 1px solid #02A9A1; padding-bottom: 4px; }}
+.rv-user-chip {{
+    display: flex; align-items: center; gap: 10px;
+    color: #D1D5DB; font-size: 12px;
+}}
+.rv-user-chip-avatar {{
+    width: 28px; height: 28px; border-radius: 50%;
+    background: #1F1F1F; color: #02A9A1;
     display: flex; align-items: center; justify-content: center;
-    font-weight: 800; font-size: 28px; color: #0D1B2A; flex-shrink: 0;
-}
-.rv-logo-text { display: flex; flex-direction: column; }
-.rv-logo-title { font-size: 36px; font-weight: 700; color: #FFFFFF; line-height: 1.2; }
-.rv-logo-sub { font-size: 12px; font-weight: 500; color: #5A8FAA; letter-spacing: 0.12em; text-transform: uppercase; margin-top: 6px; }
-.rv-nav-right { display: flex; align-items: center; gap: 20px; }
-.rv-version { font-size: 12px; color: #3A5A70; }
-.rv-claude-badge {
-    background: transparent; border: 1.5px solid #1DC9A4; color: #1DC9A4;
-    border-radius: 20px; padding: 7px 18px; font-size: 12px; font-weight: 700;
-    letter-spacing: 0.05em; display: flex; align-items: center; gap: 6px;
-}
-.rv-right-panel {
-    width: 380px; flex-shrink: 0; background: #091420;
-    border-left: 1px solid #1A2E42; padding: 36px 28px;
-    margin-right: -5rem;
-    min-height: 100vh;
-}
-.rv-panel-heading {
-    font-size: 13px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase;
-    color: #1DC9A4; margin-bottom: 12px; margin-top: 28px;
-}
-.rv-panel-heading:first-child { margin-top: 0; }
-.rv-bullet { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 10px; }
-.rv-bullet-dot { width: 6px; height: 6px; border-radius: 50%; background: #1DC9A4; margin-top: 6px; flex-shrink: 0; }
-.rv-bullet-txt { font-size: 14px; color: #5A8FAA; line-height: 1.6; }
-.rv-brokers { font-size: 13px; color: #3A6080; line-height: 2.0; margin-top: 6px; }
-.rv-meta { font-size: 13px; color: #3A6080; margin-top: 7px; }
-.rv-meta span { color: #5A8FAA; }
-.rv-divider { border: none; border-top: 1px solid #152030; margin: 20px 0; }
+    font-size: 11px; font-weight: 500;
+    border: 1px solid #2A2A2A;
+}}
 
-/* Section label with extending line — like Rent Roll */
-.rv-section-label-wrap {
-    display: flex; align-items: center; gap: 14px; margin-bottom: 18px; margin-top: 0;
-}
-.rv-section-label {
-    font-size: 11px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase;
-    color: #1DC9A4; white-space: nowrap; flex-shrink: 0;
-}
-.rv-section-label-line { flex: 1; height: 1px; background: #1A2E42; }
+/* ═════════════════════════════════════════════════════════════════════════
+   HERO — clean upload area, centered, gold-standard whitespace
+   ═══════════════════════════════════════════════════════════════════════ */
+.rv-hero {{
+    padding: 56px 24px 40px;
+    text-align: center;
+}}
+.rv-hero-title {{
+    color: #0A0A0A;
+    font-size: 26px;
+    font-weight: 500;
+    letter-spacing: -0.3px;
+    margin: 0 0 10px;
+}}
+.rv-hero-sub {{
+    color: #6B7280;
+    font-size: 14px;
+    line-height: 1.6;
+    max-width: 560px;
+    margin: 0 auto;
+}}
 
-.rv-upload-card {
-    background: #0F2438; border: 1px solid #1A3250; border-radius: 12px;
-    padding: 8px 14px 8px; margin-bottom: 8px;
-}
-.rv-upload-title { font-size: 16px; font-weight: 700; color: #FFFFFF; margin-bottom: 4px; }
-.rv-upload-sub { font-size: 12px; color: #4A7090; }
-.rv-steps { display: flex; gap: 10px; margin-top: 0; }
-.rv-step { flex: 1; background: #0F2133; border: 1px solid #1A3250; border-radius: 10px; padding: 18px 20px; }
-.rv-step-num { font-size: 10px; font-weight: 700; color: #1DC9A4; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 6px; }
-.rv-step-txt { font-size: 12px; color: #C0D0E0; line-height: 1.5; }
-.rv-file-info {
-    background: #0F2133; border: 1px solid #1E3148; border-radius: 8px;
-    padding: 10px 16px; font-size: 13px; color: #5A8FAA; margin-bottom: 12px;
-}
-.rv-file-info b { color: #C0D0E0; }
-.rv-success {
-    background: #091C11; border: 1px solid #1DC9A4; border-radius: 10px;
-    padding: 16px 20px; margin: 16px 0; display: flex; align-items: center; gap: 12px;
-}
-.rv-success-icon { font-size: 22px; }
-.rv-success-text { font-size: 14px; color: #C0D0E0; }
-.rv-success-text b { color: #1DC9A4; }
-
-/* ── Right panel column ── */
-[data-testid="stHorizontalBlock"] > div:last-child {
-    background: #091420 !important;
-    border-left: 1px solid #1A2E42 !important;
-    padding: 10px 12px !important;
-    margin-right: -5rem !important;
-    min-height: auto !important;
-}
-/* ════════════════════════════════════════════════════════════════════════
-   ── CHECKBOXES — single yellow box (NOT doubled) ──
-   • Hide the native <input> entirely (it was rendering as a 2nd checkbox)
-   • Style only ONE visible layer: the BaseWeb span/div wrapper
-   • Unchecked: yellow border, transparent fill
-   • Checked  : yellow fill with dark navy tick
-   ════════════════════════════════════════════════════════════════════════ */
-[data-testid="stCheckbox"] {
-    background: transparent !important;
-    background-color: transparent !important;
-    padding: 2px 0 3px !important;
-}
-[data-testid="stCheckbox"] label {
-    gap: 10px !important;
-    align-items: center !important;
-    background: transparent !important;
-    background-color: transparent !important;
-}
-[data-testid="stCheckbox"] label p,
-[data-testid="stCheckbox"] label div[data-testid="stMarkdownContainer"],
-[data-testid="stCheckbox"] label div[data-testid="stMarkdownContainer"] * {
-    font-size: 12px !important;
-    color: #5A8FAA !important;
-    line-height: 1.4 !important;
-    background: transparent !important;
-    background-color: transparent !important;
-}
-
-/* HIDE the raw <input type="checkbox"> completely — it was the duplicate box */
-[data-testid="stCheckbox"] input[type="checkbox"] {
-    opacity: 0 !important;
-    position: absolute !important;
-    width: 0 !important;
-    height: 0 !important;
-    min-width: 0 !important;
-    min-height: 0 !important;
-    margin: 0 !important;
-    padding: 0 !important;
-    border: none !important;
-    pointer-events: none !important;
-    appearance: none !important;
-    -webkit-appearance: none !important;
-}
-
-/* The ONLY visible checkbox — outer BaseWeb wrapper (unchecked state) */
-[data-testid="stCheckbox"] label > span:first-child,
-[data-testid="stCheckbox"] label > div:first-child {
-    background: transparent !important;
-    background-color: transparent !important;
-    border: 1.5px solid #FFC000 !important;
-    border-radius: 4px !important;
-    width: 18px !important;
-    height: 18px !important;
-    min-width: 18px !important;
-    min-height: 18px !important;
-    box-shadow: none !important;
-    opacity: 1 !important;
-    flex-shrink: 0 !important;
-    display: inline-flex !important;
-    align-items: center !important;
-    justify-content: center !important;
-    transition: all 0.15s ease !important;
-}
-
-/* Hide any nested inner box that BaseWeb adds (this was the second visible box) */
-[data-testid="stCheckbox"] label > span:first-child > div,
-[data-testid="stCheckbox"] label > span:first-child > span,
-[data-testid="stCheckbox"] label > div:first-child > div:first-child,
-[data-testid="stCheckbox"] label div[data-baseweb="checkbox"] > div:first-child {
-    background: transparent !important;
-    background-color: transparent !important;
-    border: none !important;
-    box-shadow: none !important;
-    width: 100% !important;
-    height: 100% !important;
-    margin: 0 !important;
-    padding: 0 !important;
-}
-
-/* CHECKED state — yellow fill on the outer wrapper */
-[data-testid="stCheckbox"] input[type="checkbox"]:checked ~ span:first-child,
-[data-testid="stCheckbox"] input[type="checkbox"]:checked ~ div:first-child,
-[data-testid="stCheckbox"] label:has(input:checked) > span:first-child,
-[data-testid="stCheckbox"] label:has(input:checked) > div:first-child,
-[data-testid="stCheckbox"] label > span:first-child[aria-checked="true"],
-[data-testid="stCheckbox"] label > div:first-child[aria-checked="true"],
-[data-testid="stCheckbox"] label span[data-checked="true"],
-[data-testid="stCheckbox"] label div[data-checked="true"] {
-    background-color: #FFC000 !important;
-    background: #FFC000 !important;
-    border-color: #FFC000 !important;
-}
-
-/* Checkmark tick — dark navy on yellow */
-[data-testid="stCheckbox"] svg {
-    color: #0D1B2A !important;
-    fill: #0D1B2A !important;
-    stroke: #0D1B2A !important;
-    width: 14px !important;
-    height: 14px !important;
-}
-
-/* Hover affordance on unchecked box */
-[data-testid="stCheckbox"] label:hover > span:first-child:not([aria-checked="true"]),
-[data-testid="stCheckbox"] label:hover > div:first-child:not([aria-checked="true"]) {
-    background-color: rgba(255, 192, 0, 0.12) !important;
-    background: rgba(255, 192, 0, 0.12) !important;
-}
-/* ── Select/Deselect buttons (top of panel) ── */
-[data-testid="stHorizontalBlock"] > div:last-child [data-testid="stButton"] button {
-    background: #0F2133 !important;
-    border: 1px solid #1A3250 !important;
-    color: #1DC9A4 !important;
-    font-size: 11px !important;
-    font-weight: 600 !important;
-    padding: 5px 0 !important;
-    border-radius: 6px !important;
-}
-[data-testid="stHorizontalBlock"] > div:last-child [data-testid="stButton"] button:hover {
-    background: #1DC9A420 !important;
-}
-/* ── Panel headings and dividers ── */
-.rvph  { font-size:10px; font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:#1DC9A4; margin:14px 0 8px; display:block; }
-.rvph2 { font-size:10px; font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:#1DC9A4; margin:10px 0 6px; display:block; }
-.rvdiv { border:none; border-top:1px solid #152030; margin:10px 0 6px; }
-.rvcnt { font-size:11px; color:#3A6080; text-align:center; margin:4px 0 2px; }
-.rvmeta { font-size:10px; color:#2A4860; margin-top:4px; }
-.rvmeta span { color:#4A7090; }
-.rvbrok { font-size:10px; color:#2A4860; line-height:1.8; margin-top:4px; }
-/* Kill Streamlit's outer block container right padding */
-.block-container {
-    padding-right: 0 !important;
-}
-section.main > div.block-container {
-    padding-right: 0 !important;
-}
-/* Stretch the last column div to viewport edge */
-[data-testid="stHorizontalBlock"] > div:last-child {
-    padding-right: 0 !important;
-    margin-right: 0 !important;
-    flex-shrink: 0 !important;
-}
-div[data-testid="stFileUploaderDropzoneInput"],
-.stFileUploader {
-    padding-left: 0 !important;
-    padding-right: 0 !important;
-}
-.stFileUploader > div,
-.stFileUploader > div > div,
-[data-testid="stFileUploadDropzone"] {
-    background: #0B1E30 !important;
-    border: 1.5px dashed #2A5070 !important;
-    border-radius: 12px !important;
-    padding: 22px 32px !important;
-    margin: 0 !important;
-}
-.stFileUploader * { color: #6A9AB8 !important; background: transparent !important; }
-.stFileUploader small, .stFileUploader span { color: #3A6080 !important; }
-[data-testid="stFileUploadDropzone"] > div { background: transparent !important; border: none !important; }
-/* Upload Browse button — white background */
-[data-testid="stFileUploaderDropzone"] button,
-.stFileUploader button {
+/* Streamlit file uploader — restyle to match dashed teal dropzone */
+[data-testid="stFileUploader"] {{
+    max-width: 580px;
+    margin: 24px auto 0;
+}}
+[data-testid="stFileUploader"] > section {{
     background: #FFFFFF !important;
-    color: #0D1B2A !important;
-    border: none !important;
-    border-radius: 6px !important;
-    font-weight: 600 !important;
-    font-size: 13px !important;
-    padding: 6px 16px !important;
-}
-[data-testid="stFileUploaderDropzone"] button span,
-.stFileUploader button span { color: #0D1B2A !important; }
-.stButton > button {
-    background: #1DC9A4 !important; color: #0D1B2A !important; border: none !important;
-    border-radius: 8px !important; font-weight: 700 !important; font-size: 15px !important;
-    padding: 12px 0 !important; width: 100% !important;
-}
-.stButton > button:hover { background: #18B090 !important; }
-
-/* Download buttons — solid filled style, matching .stButton */
-.stDownloadButton > button,
-[data-testid="stDownloadButton"] > button,
-[data-testid="stBaseButton-secondary"][kind="secondary"] {
-    background: #1DC9A4 !important;
-    color: #0D1B2A !important;
-    border: none !important;
-    border-radius: 8px !important;
-    font-weight: 700 !important;
-    font-size: 14px !important;
-    padding: 12px 0 !important;
-    width: 100% !important;
-    box-shadow: 0 4px 14px rgba(29, 201, 164, 0.25) !important;
-    transition: all 0.15s ease !important;
-}
-.stDownloadButton > button *,
-[data-testid="stDownloadButton"] > button * {
-    color: #0D1B2A !important;
-    fill: #0D1B2A !important;
-}
-.stDownloadButton > button:hover,
-[data-testid="stDownloadButton"] > button:hover {
-    background: #18B090 !important;
-    box-shadow: 0 6px 18px rgba(29, 201, 164, 0.35) !important;
-    transform: translateY(-1px) !important;
-}
-
-/* ════════════════════════════════════════════════════════════════════════
-   ── METRIC CARDS / parsed OM summary ──
-   Covers BOTH legacy [data-testid="metric-container"] AND new [data-testid="stMetric"]
-   Forces bright teal value + readable label across all Streamlit versions
-   ════════════════════════════════════════════════════════════════════════ */
-
-/* Make the column wrapper around each metric transparent so the card bg shows
-   uniformly — fixes the "last column" looking different from the others */
-[data-testid="stHorizontalBlock"] [data-testid="stMetric"],
-[data-testid="stHorizontalBlock"] div[data-testid="metric-container"] {
-    background: #122A40 !important;
-}
-[data-testid="stHorizontalBlock"]:has([data-testid="stMetric"]) > div,
-[data-testid="stHorizontalBlock"]:has(div[data-testid="metric-container"]) > div {
+    border: 1.5px dashed #02A9A1 !important;
+    border-radius: 12px !important;
+    padding: 36px !important;
+    text-align: center;
+    transition: border-color 0.15s, background 0.15s;
+}}
+[data-testid="stFileUploader"] > section:hover {{
+    background: #F0FBF9 !important;
+    border-color: #018A82 !important;
+}}
+[data-testid="stFileUploader"] section button {{
     background: transparent !important;
-    border-left: none !important;
-    padding: 0 4px !important;
-    margin-right: 0 !important;
-}
+    color: #02A9A1 !important;
+    border: 1px solid #02A9A1 !important;
+    border-radius: 6px !important;
+    padding: 6px 18px !important;
+    font-size: 12px !important;
+    font-weight: 500 !important;
+    box-shadow: none !important;
+}}
+[data-testid="stFileUploader"] small {{
+    color: #6B7280 !important;
+    font-size: 12px !important;
+}}
 
-div[data-testid="metric-container"],
-div[data-testid="stMetric"],
-[data-testid="stMetric"] {
-    background: #122A40 !important;
-    background-color: #122A40 !important;
-    border: 1px solid #2B526F !important;
-    border-radius: 10px !important;
-    padding: 14px 16px !important;
-    box-shadow: 0 8px 22px rgba(0,0,0,0.22) !important;
-    width: 100% !important;
-    box-sizing: border-box !important;
-}
+/* ═════════════════════════════════════════════════════════════════════════
+   STEP CARDS — below upload, three compact cards
+   ═══════════════════════════════════════════════════════════════════════ */
+.rv-steps {{
+    max-width: 580px;
+    margin: 32px auto 0;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+}}
+.rv-step {{
+    background: #FFFFFF;
+    border: 1px solid #E5E7EB;
+    border-radius: 8px;
+    padding: 14px 16px;
+}}
+.rv-step-num {{
+    color: #02A9A1;
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.5px;
+    margin-bottom: 4px;
+}}
+.rv-step-title {{
+    color: #0A0A0A;
+    font-size: 13px;
+    font-weight: 500;
+    margin-bottom: 2px;
+}}
+.rv-step-desc {{
+    color: #6B7280;
+    font-size: 11px;
+    line-height: 1.5;
+}}
 
-div[data-testid="metric-container"] *,
-div[data-testid="stMetric"] *,
-[data-testid="stMetric"] * {
-    opacity: 1 !important;
-    visibility: visible !important;
-}
+/* ═════════════════════════════════════════════════════════════════════════
+   FILE INFO BAR — shown after upload, with the analyze button next to it
+   ═══════════════════════════════════════════════════════════════════════ */
+.rv-file-bar {{
+    max-width: 720px;
+    margin: 20px auto 16px;
+    padding: 14px 20px;
+    background: #FFFFFF;
+    border: 1px solid #E5E7EB;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}}
+.rv-file-meta {{ color: #0A0A0A; font-size: 13px; }}
+.rv-file-meta b {{ font-weight: 500; }}
+.rv-file-size {{ color: #6B7280; font-size: 12px; }}
 
-/* Metric LABEL — Units, Year Built, Occupancy, Avg Rent, Reno ROI, Tax Savings */
-div[data-testid="metric-container"] label,
-div[data-testid="stMetric"] label,
-[data-testid="stMetricLabel"],
-[data-testid="stMetricLabel"] *,
-[data-testid="stMetricLabel"] p,
-[data-testid="stMetricLabel"] div,
-div[data-testid="metric-container"] [data-testid="stMetricLabel"],
-div[data-testid="metric-container"] [data-testid="stMetricLabel"] *,
-div[data-testid="metric-container"] label *,
-div[data-testid="stMetric"] [data-testid="stMetricLabel"],
-div[data-testid="stMetric"] [data-testid="stMetricLabel"] *,
-div[data-testid="stMetric"] label * {
-    color: #9BC7DE !important;
-    font-size: 11px !important;
-    font-weight: 700 !important;
-    text-transform: uppercase !important;
-    letter-spacing: 0.08em !important;
-    opacity: 1 !important;
-}
+/* ═════════════════════════════════════════════════════════════════════════
+   STREAMLIT BUTTONS — primary CTA = teal, others = ghost
+   ═══════════════════════════════════════════════════════════════════════ */
+.stButton > button {{
+    background: transparent !important;
+    color: #4B5563 !important;
+    border: 1px solid #D1D5DB !important;
+    border-radius: 6px !important;
+    padding: 7px 16px !important;
+    font-size: 12px !important;
+    font-weight: 500 !important;
+    transition: all 0.15s !important;
+    box-shadow: none !important;
+}}
+.stButton > button:hover {{
+    border-color: #02A9A1 !important;
+    color: #02A9A1 !important;
+    background: #F0FBF9 !important;
+}}
+.stButton > button[kind="primary"] {{
+    background: #02A9A1 !important;
+    color: #FFFFFF !important;
+    border: 1px solid #02A9A1 !important;
+    padding: 10px 28px !important;
+    font-size: 14px !important;
+    font-weight: 500 !important;
+}}
+.stButton > button[kind="primary"]:hover {{
+    background: #018A82 !important;
+    border-color: #018A82 !important;
+}}
 
-/* Metric VALUE — 269, 2020, 93.70%, $2,070, N/A — bright teal so it pops */
-div[data-testid="metric-container"] [data-testid="stMetricValue"],
-div[data-testid="metric-container"] [data-testid="stMetricValue"] *,
-div[data-testid="metric-container"] [data-testid="stMetricValue"] div,
-div[data-testid="metric-container"] [data-testid="stMetricValue"] p,
-div[data-testid="stMetric"] [data-testid="stMetricValue"],
-div[data-testid="stMetric"] [data-testid="stMetricValue"] *,
-div[data-testid="stMetric"] [data-testid="stMetricValue"] div,
-div[data-testid="stMetric"] [data-testid="stMetricValue"] p,
-[data-testid="stMetricValue"],
-[data-testid="stMetricValue"] *,
-[data-testid="stMetricValue"] div,
-[data-testid="stMetricValue"] p {
-    font-size: 26px !important;
-    color: #1DC9A4 !important;
-    font-weight: 700 !important;
-    line-height: 1.2 !important;
-    opacity: 1 !important;
-    text-shadow: 0 1px 2px rgba(0,0,0,0.45) !important;
-}
+.stDownloadButton > button {{
+    background: #02A9A1 !important;
+    color: #FFFFFF !important;
+    border: 1px solid #02A9A1 !important;
+    border-radius: 6px !important;
+    padding: 10px 22px !important;
+    font-weight: 500 !important;
+    box-shadow: none !important;
+}}
+.stDownloadButton > button:hover {{
+    background: #018A82 !important;
+    border-color: #018A82 !important;
+}}
 
-/* Metric DELTA */
-div[data-testid="metric-container"] [data-testid="stMetricDelta"],
-div[data-testid="metric-container"] [data-testid="stMetricDelta"] *,
-div[data-testid="stMetric"] [data-testid="stMetricDelta"],
-div[data-testid="stMetric"] [data-testid="stMetricDelta"] *,
-[data-testid="stMetricDelta"],
-[data-testid="stMetricDelta"] * {
-    color: #1DC9A4 !important;
-    opacity: 1 !important;
-}
+/* ═════════════════════════════════════════════════════════════════════════
+   CUSTOMIZE EXPANDER — replaces the right-panel checkboxes
+   ═══════════════════════════════════════════════════════════════════════ */
+[data-testid="stExpander"] {{
+    max-width: 720px;
+    margin: 0 auto 20px;
+    background: #FFFFFF !important;
+    border: 1px solid #E5E7EB !important;
+    border-radius: 8px !important;
+    box-shadow: none !important;
+}}
+[data-testid="stExpander"] summary {{
+    padding: 12px 18px !important;
+    font-size: 13px !important;
+    font-weight: 500 !important;
+    color: #0A0A0A !important;
+}}
+[data-testid="stExpander"] summary:hover {{ background: #F9FAFB !important; }}
+[data-testid="stExpander"] [data-testid="stExpanderDetails"] {{
+    padding: 4px 18px 18px !important;
+    border-top: 1px solid #F3F4F6 !important;
+}}
+.rv-cust-group-title {{
+    color: #02A9A1;
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.6px;
+    text-transform: uppercase;
+    margin: 12px 0 6px;
+}}
 
-.stProgress > div > div { background: #1DC9A4 !important; }
-.stAlert, .stSuccess, .stError, .stInfo { background: #0F2133 !important; border-color: #1E3148 !important; color: #C0D0E0 !important; border-radius: 8px !important; }
+/* Checkbox styling
+   DOM: label > span(checkbox-square) + input + div(label-text)
+   We need to (a) keep the square teal when checked, (b) keep the text plain */
+[data-testid="stCheckbox"] {{ margin-bottom: 4px; }}
+[data-testid="stCheckbox"] label > div {{
+    background: transparent !important;
+}}
+[data-testid="stCheckbox"] label > div p {{
+    background: transparent !important;
+    color: #374151 !important;
+    font-size: 12.5px !important;
+    margin: 0 !important;
+    line-height: 1.4 !important;
+}}
 
-/* ── UPDATED: Tab bar ── */
-.stTabs [data-baseweb="tab-list"] {
-    background: #0F2133 !important; border-radius: 8px 8px 0 0 !important;
-    padding: 4px 4px 0 !important; border-bottom: 1px solid #1E3148 !important; gap: 3px !important;
-}
-.stTabs [data-baseweb="tab"] {
-    color: #5A8FAA !important; font-size: 13px !important; background: transparent !important;
-    border-radius: 6px 6px 0 0 !important; padding: 7px 16px !important;
-}
-.stTabs [aria-selected="true"] {
-    color: #1DC9A4 !important; box-shadow: inset 0 -2px 0 #1DC9A4 !important;
-    background: #162F47 !important;
-}
-.stTabs [data-baseweb="tab"]:hover {
-    color: #C0D0E0 !important; background: #1A3050 !important;
-}
-.stTabs [data-baseweb="tab-panel"] { background: #0D1B2A !important; padding-top: 16px !important; }
+/* ═════════════════════════════════════════════════════════════════════════
+   RESULTS — metric strip + tabs + download bar
+   ═══════════════════════════════════════════════════════════════════════ */
+.rv-results-header {{
+    max-width: 1200px; margin: 28px auto 12px;
+    padding: 0 24px;
+}}
+.rv-prop-name {{ color: #0A0A0A; font-size: 22px; font-weight: 500; margin: 0; }}
+.rv-prop-meta {{ color: #6B7280; font-size: 13px; margin-top: 4px; }}
 
-.streamlit-expanderHeader { background: #0F2133 !important; color: #C0D0E0 !important; border-radius: 8px !important; border: 1px solid #1E3148 !important; }
-.gold-header { background: #1A1A18; color: #D4B07A; padding: 5px 14px; border-radius: 6px; font-size: 12px; font-weight: 600; margin: 16px 0 8px; display: inline-block; }
-.flag-warn   { background:#1C1408; border-left:3px solid #D4A054; padding:10px 14px; border-radius:0 6px 6px 0; margin:6px 0; }
-.flag-good   { background:#091C11; border-left:3px solid #1DC9A4; padding:10px 14px; border-radius:0 6px 6px 0; margin:6px 0; }
-.flag-info   { background:#091525; border-left:3px solid #5A8AC0; padding:10px 14px; border-radius:0 6px 6px 0; margin:6px 0; }
-.flag-verify { background:#130E1E; border-left:3px solid #9A7ACA; padding:10px 14px; border-radius:0 6px 6px 0; margin:6px 0; }
-.flag-title  { font-size:13px; font-weight:600; margin-bottom:3px; color:#E0E6EF; }
-.flag-body   { font-size:12px; color:#7A9AB8; line-height:1.5; }
-::-webkit-scrollbar { width: 6px; }
-::-webkit-scrollbar-track { background: #0A1520; }
-::-webkit-scrollbar-thumb { background: #1E3148; border-radius: 3px; }
+.rv-metric {{
+    background: #FFFFFF;
+    border: 1px solid #E5E7EB;
+    border-radius: 8px;
+    padding: 14px 16px;
+    height: 100%;
+}}
+.rv-metric-label {{
+    color: #6B7280;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 6px;
+}}
+.rv-metric-value {{ color: #0A0A0A; font-size: 18px; font-weight: 500; }}
+
+/* Sticky download bar */
+.rv-dl-bar {{
+    max-width: 1200px;
+    margin: 16px auto;
+    padding: 16px 24px;
+    background: #FFFFFF;
+    border: 1px solid #02A9A1;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    box-shadow: 0 2px 8px rgba(2, 169, 161, 0.08);
+}}
+.rv-dl-label {{ color: #0A0A0A; font-size: 13px; font-weight: 500; }}
+.rv-dl-sub {{ color: #6B7280; font-size: 11px; margin-top: 2px; }}
+
+/* Tabs */
+.stTabs [data-baseweb="tab-list"] {{
+    background: transparent;
+    gap: 0;
+    border-bottom: 1px solid #E5E7EB;
+    padding: 0 24px;
+}}
+.stTabs [data-baseweb="tab"] {{
+    background: transparent !important;
+    color: #6B7280 !important;
+    font-size: 13px !important;
+    padding: 10px 16px !important;
+    border-bottom: 2px solid transparent !important;
+}}
+.stTabs [aria-selected="true"] {{
+    color: #0A0A0A !important;
+    border-bottom-color: #02A9A1 !important;
+    font-weight: 500 !important;
+}}
+
+/* Streamlit alerts */
+.stAlert {{ border-radius: 8px !important; max-width: 1200px; margin: 12px auto !important; }}
+
+/* Progress bar */
+.stProgress > div > div > div > div {{ background: #02A9A1 !important; }}
+
+/* Footer */
+.rv-footer {{
+    margin-top: 60px;
+    padding: 16px 36px;
+    background: #F4F4F4;
+    border-top: 1px solid #E5E7EB;
+    display: flex;
+    justify-content: space-between;
+    font-size: 11px;
+    color: #6B7280;
+}}
+.rv-footer a {{ color: #02A9A1; text-decoration: none; }}
+
+/* Scrollbar */
+::-webkit-scrollbar {{ width: 8px; }}
+::-webkit-scrollbar-track {{ background: #F4F4F4; }}
+::-webkit-scrollbar-thumb {{ background: #D1D5DB; border-radius: 4px; }}
+::-webkit-scrollbar-thumb:hover {{ background: #9CA3AF; }}
 </style>
 """, unsafe_allow_html=True)
+
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -2113,24 +2068,45 @@ def build_excel(d: dict, filename: str, sections: dict = None) -> bytes:
 with st.sidebar:
     pass
 
-st.markdown("""
-<div class="rv-navbar">
-  <div class="rv-logo-block">
-    <div class="rv-logo-icon">OM</div>
-    <div class="rv-logo-text">
-      <div class="rv-logo-title">OM Analyzer</div>
-      <div class="rv-logo-sub">RealVal &nbsp;·&nbsp; Multifamily Underwriting Intelligence</div>
-    </div>
+# ═══════════════════════════════════════════════════════════════════════════
+# NEW NAVBAR — RealVal logo (clickable → therealval.com), tagline, user chip
+# ═══════════════════════════════════════════════════════════════════════════
+_user_email = ""
+if st.session_state.get("user"):
+    try:
+        _user_email = st.session_state["user"].email or ""
+    except Exception:
+        _user_email = ""
+_avatar_initials = "".join(p[0].upper() for p in (_user_email.split("@")[0] or "U").replace(".", " ").split()[:2]) or "U"
+
+_logo_img_tag = (
+    f'<img src="data:image/png;base64,{_LOGO_B64}" alt="RealVal" />'
+    if _LOGO_B64 else
+    '<span style="color:#02A9A1;font-weight:500;font-size:18px;">RealVal</span>'
+)
+
+st.markdown(f"""
+<div class="rv-nav">
+  <div class="rv-nav-left">
+    <a href="https://therealval.com/" target="_blank" rel="noopener">
+      {_logo_img_tag}
+    </a>
+    <span class="rv-nav-tagline">OM Intelligence</span>
   </div>
   <div class="rv-nav-right">
-    <span class="rv-version">v3.0</span>
-    <div class="rv-claude-badge">⚡ CLAUDE AI</div>
+    <span class="rv-nav-link active">Analyze</span>
+    <span class="rv-nav-link" style="opacity:0.5;cursor:not-allowed;" title="Coming soon">History</span>
+    <div class="rv-user-chip">
+      <span>{_user_email}</span>
+      <div class="rv-user-chip-avatar">{_avatar_initials}</div>
+    </div>
   </div>
 </div>
 """, unsafe_allow_html=True)
 
-main_col, right_col = st.columns([2.2, 1], gap="small")
-
+# ═══════════════════════════════════════════════════════════════════════════
+# SECTION FLAGS — same keys/state as before, just defaulted on
+# ═══════════════════════════════════════════════════════════════════════════
 _keys = ["deal","unitmix","opstat","valueadd","financing","flags","tax","repl",
          "rentcomps","addinc2","salecomps","addinc","utilities","pop","afford",
          "schools","employers","market"]
@@ -2146,68 +2122,73 @@ def _cb_desall():
     for k in _keys:
         st.session_state["sel_"+k] = False
 
-with right_col:
-    # ── Logged-in user + Sign Out ──────────────────────────────────────────
-    _user_email = ""
-    if st.session_state.get("user"):
-        try:
-            _user_email = st.session_state["user"].email or ""
-        except Exception:
-            _user_email = ""
-    st.markdown(
-        f'<div class="rvmeta" style="margin-bottom:2px;">🔐 <span>{_user_email}</span></div>',
-        unsafe_allow_html=True
-    )
-    if st.button("Sign Out", use_container_width=True, key="btn_signout"):
+# Sign-out lives in the sidebar (kept simple, off-canvas)
+with st.sidebar:
+    st.markdown(f"**Signed in as**  \n`{_user_email}`")
+    if st.button("Sign Out", key="btn_signout_side", use_container_width=True):
         logout()
-    st.markdown('<div class="rvdiv"></div>', unsafe_allow_html=True)
-    # ──────────────────────────────────────────────────────────────────────
 
-    st.markdown('<div class="rvph" style="margin-top:0;">What\'s in the Report</div>', unsafe_allow_html=True)
-    st.markdown('<div class="rvph2">Tab 1 — Financials</div>', unsafe_allow_html=True)
-    def _cb(key, label):
-        c1, c2 = st.columns([0.08, 0.92])
-        with c1:
-            st.checkbox("", key=key, label_visibility="collapsed")
-        with c2:
-            st.markdown(f'<p style="color:#5A8FAA;font-size:12px;margin-top:6px;margin-bottom:0;">{label}</p>', unsafe_allow_html=True)
-
-    _cb("sel_deal",      "Deal summary &amp; property details")
-    _cb("sel_unitmix",   "Unit mix with rent upside")
-    _cb("sel_opstat",    "Operating statement (all periods)")
-    _cb("sel_valueadd",  "Value-add by floor plan &amp; revenue levers")
-    _cb("sel_financing", "Financing &amp; debt terms (incl. IO period)")
-    _cb("sel_flags",     "Underwriting flags")
-    _cb("sel_tax",       "Property tax &amp; abatement")
-    _cb("sel_repl",      "Replacement cost, insurance &amp; management")
-    st.markdown('<div class="rvdiv"></div><div class="rvph2">Tab 2 — Comparables</div>', unsafe_allow_html=True)
-    _cb("sel_rentcomps", "Garden &amp; townhouse rent comps")
-    _cb("sel_addinc2",   "Additional income opportunities")
-    _cb("sel_salecomps", "Sale comparables with buyer/seller")
-    st.markdown('<div class="rvdiv"></div><div class="rvph2">Tab 3 — Demographics</div>', unsafe_allow_html=True)
-    _cb("sel_addinc",    "Additional income")
-    _cb("sel_utilities", "Utilities &amp; site information")
-    _cb("sel_pop",       "Population &amp; income (1-mi / 3-mi / 5-mi)")
-    _cb("sel_afford",    "Affordability analysis")
-    _cb("sel_schools",   "Schools, crime &amp; quality of life")
-    _cb("sel_employers", "Major employers &amp; economic drivers")
-    _cb("sel_market",    "Market, submarket &amp; supply/demand")
-
-    _n_sel = sum(st.session_state.get("sel_"+k, True) for k in _keys)
-    st.markdown(f'<div class="rvdiv"></div><div class="rvcnt">{_n_sel} / 18 selected</div>', unsafe_allow_html=True)
-
-    st.button("✓  Select All",  key="btn_sel", use_container_width=True, on_click=_cb_selall)
-    st.button("✕  Deselect All", key="btn_des", use_container_width=True, on_click=_cb_desall)
-
-    st.markdown(f"""
-<div class="rvdiv"></div>
-<div class="rvph">Supported Brokers</div>
-<div class="rvbrok">JLL · CBRE · Marcus &amp; Millichap · Cushman &amp; Wakefield · Newmark · Colliers · Berkadia · Walker &amp; Dunlop · Northmarq</div>
-<div class="rvdiv"></div>
-<div class="rvmeta">Processing time: <span>30–90 sec</span></div>
-<div class="rvmeta">Max file size: <span>50 MB</span></div>
-<div class="rvmeta">Output: <span>3-tab Excel (.xlsx)</span></div>
+# ═══════════════════════════════════════════════════════════════════════════
+# HERO — single centred upload area with title, subtitle, and dropzone
+# ═══════════════════════════════════════════════════════════════════════════
+st.markdown("""
+<div class="rv-hero">
+  <div class="rv-hero-title">Drop your Offering Memorandum</div>
+  <div class="rv-hero-sub">
+    PDF only · CBRE, JLL, Marcus &amp; Millichap, Cushman &amp; Wakefield, Newmark, Berkadia and others · ~60 seconds to analyze
+  </div>
+</div>
 """, unsafe_allow_html=True)
+
+api_key = st.secrets.get("ANTHROPIC_API_KEY", os.environ.get("ANTHROPIC_API_KEY", ""))
+if not api_key:
+    st.error("""
+**API key not configured.**
+- **Streamlit Cloud:** Go to ⚙️ Settings → Secrets → add: `ANTHROPIC_API_KEY = "sk-ant-..."`
+- **Local:** Create `.streamlit/secrets.toml` with the same line.
+""")
+    st.stop()
+os.environ["ANTHROPIC_API_KEY"] = api_key
+
+uploaded = st.file_uploader("Drop your OM PDF here", type=["pdf"], label_visibility="collapsed")
+
+# ═══════════════════════════════════════════════════════════════════════════
+# CUSTOMIZE REPORT — expander replaces the right-column wall of checkboxes
+# ═══════════════════════════════════════════════════════════════════════════
+def _cb(key, label):
+    st.checkbox(label, key=key)
+
+_n_sel = sum(st.session_state.get("sel_"+k, True) for k in _keys)
+with st.expander(f"⚙  Customize report  ·  {_n_sel} of 18 sections selected", expanded=False):
+    cust_c1, cust_c2, cust_c3 = st.columns(3)
+    with cust_c1:
+        st.markdown('<div class="rv-cust-group-title">Financials Tab</div>', unsafe_allow_html=True)
+        _cb("sel_deal",      "Deal summary & property details")
+        _cb("sel_unitmix",   "Unit mix with rent upside")
+        _cb("sel_opstat",    "Operating statement (all periods)")
+        _cb("sel_valueadd",  "Value-add by floor plan & revenue levers")
+        _cb("sel_financing", "Financing & debt terms")
+        _cb("sel_tax",       "Property tax & abatement")
+        _cb("sel_repl",      "Replacement cost, insurance & management")
+    with cust_c2:
+        st.markdown('<div class="rv-cust-group-title">Comparables Tab</div>', unsafe_allow_html=True)
+        _cb("sel_rentcomps", "Garden & townhouse rent comps")
+        _cb("sel_addinc2",   "Additional income opportunities")
+        _cb("sel_salecomps", "Sale comparables with buyer/seller")
+        st.markdown('<div class="rv-cust-group-title" style="margin-top:18px;">Flags Tab</div>', unsafe_allow_html=True)
+        _cb("sel_flags",     "Underwriting flags")
+    with cust_c3:
+        st.markdown('<div class="rv-cust-group-title">Demographics Tab</div>', unsafe_allow_html=True)
+        _cb("sel_addinc",    "Additional income breakdown")
+        _cb("sel_utilities", "Utilities & site information")
+        _cb("sel_pop",       "Population & income (1-/3-/5-mile)")
+        _cb("sel_afford",    "Affordability analysis")
+        _cb("sel_schools",   "Schools, crime & quality of life")
+        _cb("sel_employers", "Major employers & economic drivers")
+        _cb("sel_market",    "Market, submarket & supply/demand")
+    sa1, sa2, _ = st.columns([0.18, 0.18, 0.64])
+    with sa1: st.button("✓  Select all",  key="btn_sel", on_click=_cb_selall, use_container_width=True)
+    with sa2: st.button("✕  Deselect all", key="btn_des", on_click=_cb_desall, use_container_width=True)
 
 sel_deal=st.session_state["sel_deal"]; sel_unitmix=st.session_state["sel_unitmix"]
 sel_opstat=st.session_state["sel_opstat"]; sel_valueadd=st.session_state["sel_valueadd"]
@@ -2219,38 +2200,37 @@ sel_utilities=st.session_state["sel_utilities"]; sel_pop=st.session_state["sel_p
 sel_afford=st.session_state["sel_afford"]; sel_schools=st.session_state["sel_schools"]
 sel_employers=st.session_state["sel_employers"]; sel_market=st.session_state["sel_market"]
 
-with main_col:
-    st.markdown("""
-<div style="padding: 20px 44px 0;">
-  <div class="rv-section-label-wrap">
-    <span class="rv-section-label">Upload Offering Memorandum</span>
-    <div class="rv-section-label-line"></div>
-  </div>
-  <div class="rv-upload-card">
-    <div class="rv-upload-title">Upload Your OM</div>
-    <div class="rv-upload-sub">Supports any broker PDF — JLL, CBRE, Marcus &amp; Millichap, Northmarq and more</div>
-  </div>
-</div>
-""", unsafe_allow_html=True)
+# ═══════════════════════════════════════════════════════════════════════════
+# MAIN BODY — original logic preserved; outer column wrapper removed
+# ═══════════════════════════════════════════════════════════════════════════
+if True:
 
-    api_key = st.secrets.get("ANTHROPIC_API_KEY", os.environ.get("ANTHROPIC_API_KEY", ""))
-    if not api_key:
-        st.error("""
-**API key not configured.**
-- **Streamlit Cloud:** Go to ⚙️ Settings → Secrets → add: `ANTHROPIC_API_KEY = "sk-ant-..."`
-- **Local:** Create `.streamlit/secrets.toml` with the same line.
-""")
-        st.stop()
-    os.environ["ANTHROPIC_API_KEY"] = api_key
-
-    _gap, _upload_col = st.columns([0.058, 0.942])
-    with _upload_col:
-        uploaded = st.file_uploader("Drop your OM PDF here", type=["pdf"], label_visibility="collapsed")
+    # ══════════════════════════════════════════════════════════════════════
+    # ── DEMO STATE INJECTOR — for UI screenshots only ──
+    # Triggers when ?demo=blueridge is in URL; loads a saved analysis into
+    # session_state so the results UI can be screenshotted without re-running.
+    # Safe to leave in: silent no-op unless the param is set.
+    # ══════════════════════════════════════════════════════════════════════
+    try:
+        _qp = st.query_params
+        if _qp.get("demo") == "blueridge" and "analysis_data" not in st.session_state:
+            import pickle, pathlib
+            _demo_path = pathlib.Path(__file__).parent / "assets" / "demo_blueridge.pkl"
+            if _demo_path.exists():
+                _demo = pickle.loads(_demo_path.read_bytes())
+                for _dkey, _dval in _demo.items():
+                    st.session_state[_dkey] = _dval
+                # Mark the upload as "matched" so the auto-clear below doesn't wipe it
+                st.session_state["uploaded_file_id"] = "demo:blueridge"
+    except Exception:
+        pass
 
     # ── Detect new file upload and clear previous results ─────────────────
     _current_file_id = None
     if uploaded is not None:
         _current_file_id = f"{uploaded.name}_{uploaded.size}"
+    elif st.query_params.get("demo") == "blueridge":
+        _current_file_id = "demo:blueridge"   # don't wipe injected demo state
     _last_file_id = st.session_state.get("uploaded_file_id")
     if _current_file_id != _last_file_id:
         for _k in ("analysis_data", "analysis_excel_bytes", "analysis_filename",
@@ -2258,28 +2238,50 @@ with main_col:
             st.session_state.pop(_k, None)
         st.session_state["uploaded_file_id"] = _current_file_id
 
-    if uploaded is None:
+    if uploaded is None and "analysis_data" not in st.session_state:
         st.markdown("""
-<div style="padding: 0 44px;">
 <div class="rv-steps">
-  <div class="rv-step"><div class="rv-step-num">Step 1</div><div class="rv-step-txt">Upload a PDF using the box above</div></div>
-  <div class="rv-step"><div class="rv-step-num">Step 2</div><div class="rv-step-txt">Click Analyze (takes 30–90 sec)</div></div>
-  <div class="rv-step"><div class="rv-step-num">Step 3</div><div class="rv-step-txt">Download the underwriting Excel</div></div>
-</div>
+  <div class="rv-step">
+    <div class="rv-step-num">01</div>
+    <div class="rv-step-title">Upload OM</div>
+    <div class="rv-step-desc">Any broker PDF</div>
+  </div>
+  <div class="rv-step">
+    <div class="rv-step-num">02</div>
+    <div class="rv-step-title">AI extracts</div>
+    <div class="rv-step-desc">Financials · comps · flags</div>
+  </div>
+  <div class="rv-step">
+    <div class="rv-step-num">03</div>
+    <div class="rv-step-title">Export</div>
+    <div class="rv-step-desc">Excel ready to share</div>
+  </div>
 </div>
 """, unsafe_allow_html=True)
         st.stop()
 
-    size_mb = uploaded.size / 1024 / 1024
-    st.markdown(f"""
-<div style="padding: 0 44px;">
-<div class="rv-file-info">
-  📄 &nbsp;<b>{uploaded.name}</b> &nbsp;—&nbsp; {size_mb:.1f} MB
-</div>
+    if uploaded is not None:
+        size_mb = uploaded.size / 1024 / 1024
+        st.markdown(f"""
+<div class="rv-file-bar">
+  <div>
+    <div class="rv-file-meta">📄 &nbsp;<b>{uploaded.name}</b></div>
+    <div class="rv-file-size">{size_mb:.1f} MB &nbsp;·&nbsp; ready to analyze</div>
+  </div>
 </div>
 """, unsafe_allow_html=True)
 
-    if st.button("🔍  Analyze Offering Memorandum", type="primary", use_container_width=True):
+        # Center the Analyze button
+        _bc1, _bc2, _bc3 = st.columns([0.3, 0.4, 0.3])
+        with _bc2:
+            _analyze_clicked = st.button("Analyze Offering Memorandum",
+                                          type="primary",
+                                          use_container_width=True,
+                                          key="btn_analyze_main")
+    else:
+        _analyze_clicked = False
+
+    if _analyze_clicked:
         progress_bar = st.progress(0, text="Starting...")
         status_box   = st.empty()
 
