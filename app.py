@@ -877,7 +877,15 @@ def _v(val, fmt=None, suffix="", default="N/A"):
         try: return f"${float(val):,.0f}{suffix}"
         except: return str(val)
     if fmt == "%":
-        try: return f"{float(val):.1f}%"
+        try:
+            f = float(val)
+            # Auto-detect decimals: 0.72 → 72%, 5.75 → 5.75%
+            if 0 < abs(f) < 1.0:
+                f = f * 100
+            # 2 decimals if not a whole number, else 1
+            if abs(f - round(f)) < 0.01:
+                return f"{f:.1f}%"
+            return f"{f:.2f}%"
         except: return str(val)
     if fmt == "n":
         try: return f"{int(float(val)):,}{suffix}"
@@ -915,111 +923,343 @@ def _is_num(v):
 
 C_HDR      = "FF44546A"
 C_HDR2     = "FF2C3644"
-C_HDR3     = "FF295781"
-C_SUB_HDR  = "FFD3D3D3"
-C_HDR_TEXT = "FFE7E6E6"
-C_AMBER    = "FFFFC000"
-C_BLUE_IN  = "FF0070C0"
-C_LABEL    = "FF44546A"
-C_BODY     = "FF3E3E3E"
-C_WHITE    = "FFFFFFFF"
-C_ALT      = "FFEBF0F7"
-C_SUBTOTAL = "FFDDEBF7"
-C_WARN     = "FFFFF2CC"
-C_GREEN_L  = "FFD0F0D8"
-C_BLUE_L   = "FFBED2E6"
-C_PURPLE_L = "FFF4CCCC"
-C_BORDER   = "FFB7B7B7"
+# ══════════════════════════════════════════════════════════════════════════════
+# CLEAN CORPORATE STYLING SYSTEM
+# White + grey + deep-navy accent. Bottom-borders only. Real Excel numbers
+# where possible (auto-detected from formatted strings).
+# ══════════════════════════════════════════════════════════════════════════════
+
+# ── Palette ──────────────────────────────────────────────────────────────────
+C_NAVY        = "FF1E3A5F"  # Primary accent (section headers, totals text)
+C_NAVY_LIGHT  = "FF2C4F7E"  # Slightly lighter navy (subheaders' bottom rule)
+C_TEXT        = "FF1F2937"  # Charcoal body text
+C_TEXT_MUTED  = "FF6B7280"  # Secondary / labels
+C_DIVIDER     = "FFE5E7EB"  # Light grey divider lines
+C_SUB_FILL    = "FFF3F4F6"  # Sub-header band background
+C_ROW_ALT     = "FFFAFAFA"  # Zebra striping (very subtle)
+C_WHITE       = "FFFFFFFF"
+C_TOTAL_FILL  = "FFEFF3F8"  # Subtotal band (very pale blue-grey)
+C_NEG         = "FFB91C1C"  # Red for negative numbers
+
+# Flag colors (kept subtle, just left-border accent in implementation)
+C_WARN_BG     = "FFFEF3C7"  # Soft amber
+C_WARN_BAR    = "FFD97706"
+C_GOOD_BG     = "FFD1FAE5"  # Soft green
+C_GOOD_BAR    = "FF059669"
+C_INFO_BG     = "FFDBEAFE"  # Soft blue
+C_INFO_BAR    = "FF2563EB"
+C_VER_BG      = "FFE9D5FF"  # Soft purple
+C_VER_BAR     = "FF7C3AED"
+
+# ── Legacy aliases (kept so the existing build_excel call sites still work) ──
+C_HDR      = C_NAVY
+C_HDR2     = C_NAVY
+C_HDR3     = C_NAVY
+C_SUB_HDR  = C_SUB_FILL
+C_HDR_TEXT = C_WHITE
+C_AMBER    = C_NAVY        # totals text on light fill — now navy not amber
+C_BLUE_IN  = C_TEXT        # data text — charcoal not blue
+C_LABEL    = C_TEXT_MUTED
+C_BODY     = C_TEXT
+C_ALT      = C_ROW_ALT
+C_SUBTOTAL = C_TOTAL_FILL
+C_WARN     = C_WARN_BG
+C_GREEN_L  = C_GOOD_BG
+C_BLUE_L   = C_INFO_BG
+C_PURPLE_L = C_VER_BG
+C_BORDER   = C_DIVIDER
 
 
+# ── Borders: bottom-only, light grey ─────────────────────────────────────────
 def _fill(c): return PatternFill("solid", fgColor=c)
-def _border():
-    s = Side(style="thin", color=C_BORDER)
-    return Border(left=s, right=s, top=s, bottom=s)
 
-def _sc(ws, row, col, val, bold=False, bg=None, fg="FF3E3E3E",
-        size=9, ha="left", wrap=True, italic=False):
+_NO_BORDER     = Border()
+_BOTTOM_BORDER = Border(bottom=Side(style="thin", color=C_DIVIDER))
+_THICK_BOTTOM  = Border(bottom=Side(style="medium", color=C_NAVY))
+_TOP_RULE      = Border(top=Side(style="medium", color=C_NAVY))
+
+def _border():
+    """Legacy compat — returns the standard subtle bottom rule."""
+    return _BOTTOM_BORDER
+
+
+# ── Number-format detection ──────────────────────────────────────────────────
+_RE_CURRENCY = re.compile(r"^\$?-?\(?[\d,]+(\.\d+)?\)?$")
+_RE_PERCENT  = re.compile(r"^-?\(?\d+(\.\d+)?\)?%$")
+_RE_INT      = re.compile(r"^-?\(?[\d,]+\)?$")
+
+def _parse_numeric(s):
+    """If s looks like a formatted number, return (float_value, excel_format).
+    Else return (None, None).
+
+    Special cases:
+    - 4-digit years (1900-2100) → integer format with no comma ('0')
+    - Percent strings (e.g. '5.75%') → decimal value with '0.00%' format
+    - Currency strings → '$#,##0' (or '$#,##0.00' if decimal in source)
+    """
+    if s is None: return None, None
+    if not isinstance(s, str): s = str(s)
+    t = s.strip()
+    if t in ("", "—", "-", "N/A", "n/a", "NA"): return None, None
+    neg = t.startswith("(") and t.endswith(")")
+    if neg: t = t[1:-1]
+
+    # Percent
+    if _RE_PERCENT.match(t):
+        try:
+            raw = float(t.rstrip("%").replace(",", ""))
+            f = raw / 100
+            # Use 2 decimals if the percent isn't a whole number
+            fmt = '0.0%' if abs(raw - round(raw)) < 0.05 else '0.00%'
+            return (-f if neg else f), fmt
+        except: return None, None
+
+    # Currency with $ sign
+    if _RE_CURRENCY.match(t) and "$" in t:
+        try:
+            f = float(t.replace("$", "").replace(",", ""))
+            has_dec = "." in t
+            return (-f if neg else f), ('$#,##0.00' if has_dec else '$#,##0;($#,##0)')
+        except: return None, None
+
+    # Plain integer (no $, no %, no decimal)
+    if _RE_INT.match(t):
+        try:
+            f = float(t.replace(",", ""))
+            # Special: 4-digit years render without comma
+            if 1900 <= f <= 2100 and f == int(f) and "," not in t:
+                return (-f if neg else f), '0'
+            return (-f if neg else f), '#,##0;(#,##0)'
+        except: return None, None
+
+    # Numeric with decimal but no $
+    if _RE_CURRENCY.match(t):
+        try:
+            f = float(t.replace(",", ""))
+            return (-f if neg else f), '#,##0.00;(#,##0.00)'
+        except: return None, None
+
+    return None, None
+
+
+# ── Core cell writer ─────────────────────────────────────────────────────────
+def _sc(ws, row, col, val, bold=False, bg=None, fg=None,
+        size=9, ha="left", wrap=True, italic=False, num_fmt=None):
+    """Set a cell. Auto-detects numeric strings and writes them as real numbers
+    with a number format so clients can sort/filter/formula. Pass num_fmt to
+    override detection. Pass val=None or '—' to render an em-dash placeholder."""
     c = ws.cell(row=row, column=col)
-    c.value = val
-    c.font = Font(name="Calibri", bold=bold, color=fg, size=size, italic=italic)
+    final_fg = fg if fg else C_TEXT
+
+    # Try numeric promotion
+    if val is not None and val != "" and val != "—" and num_fmt is None:
+        num_val, detected_fmt = _parse_numeric(val)
+        if num_val is not None:
+            c.value = num_val
+            c.number_format = detected_fmt
+            # Negative numbers in red (data rows only — not totals/headers)
+            if num_val < 0 and not bold:
+                final_fg = C_NEG
+        else:
+            c.value = val
+    elif num_fmt is not None:
+        c.value = val if val not in (None, "", "—") else None
+        c.number_format = num_fmt
+    else:
+        c.value = val if val not in (None, "") else "—"
+
+    c.font = Font(name="Calibri", bold=bold, color=final_fg, size=size, italic=italic)
     c.alignment = Alignment(horizontal=ha, vertical="center", wrap_text=wrap)
-    if bg: c.fill = PatternFill("solid", fgColor=bg)
-    c.border = _border()
+    if bg:
+        c.fill = PatternFill("solid", fgColor=bg)
+    # Default: no border. Specific row helpers set bottom rules where needed.
+    c.border = _NO_BORDER
     return c
 
-def _fr(ws, row, ncols, bg):
-    for c in range(1, ncols + 1):
-        ws.cell(row=row, column=c).fill = PatternFill("solid", fgColor=bg)
 
+def _fr(ws, row, ncols, bg):
+    """Fill an entire row with a background color (no border)."""
+    for c in range(1, ncols + 1):
+        cell = ws.cell(row=row, column=c)
+        cell.fill = PatternFill("solid", fgColor=bg)
+
+
+# ── Section header: navy bar, white text, generous height ────────────────────
 def _sec(ws, row, title, n=14):
-    _fr(ws, row, n, C_HDR)
-    _sc(ws, row, 1, title, bold=True, bg=C_HDR, fg=C_HDR_TEXT, size=11)
+    _fr(ws, row, n, C_NAVY)
+    c = _sc(ws, row, 1, title, bold=True, bg=C_NAVY, fg=C_WHITE,
+            size=11, ha="left", wrap=False)
+    # Merge across all cols so a long title doesn't wrap onto two visual lines
+    try:
+        ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=n)
+    except Exception:
+        pass
+    ws.row_dimensions[row].height = 26
+    return row + 1
+
+
+# ── Column header row: light grey band with navy bottom rule ────────────────
+def _thdr(ws, row, headers, n=14):
+    _fr(ws, row, n, C_SUB_FILL)
+    for i, h in enumerate(headers):
+        c = _sc(ws, row, 1 + i, h, bold=True, bg=C_SUB_FILL,
+                fg=C_NAVY, size=9, ha="center")
+        c.border = _THICK_BOTTOM
     ws.row_dimensions[row].height = 22
     return row + 1
 
-def _thdr(ws, row, headers, n=14):
-    _fr(ws, row, n, C_SUB_HDR)
-    for i, h in enumerate(headers):
-        _sc(ws, row, 1 + i, h, bold=True, bg=C_SUB_HDR, fg=C_LABEL, size=9, ha="center")
+
+# ── Sub-header inside a section (e.g. "Renovation Tiers") ───────────────────
+def _shdr(ws, row, title, n=14):
+    _fr(ws, row, n, C_WHITE)
+    c = _sc(ws, row, 1, title.upper(), bold=True, bg=C_WHITE,
+            fg=C_NAVY, size=9, ha="left", wrap=False)
+    try:
+        ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=n)
+    except Exception:
+        pass
+    # Letter-spacing effect via thin bottom rule
+    for col in range(1, n + 1):
+        ws.cell(row=row, column=col).border = _BOTTOM_BORDER
+    ws.row_dimensions[row].height = 20
+    return row + 1
+
+
+# ── Key/value row: bold label left, value right ─────────────────────────────
+def _kv(ws, row, label, value, alt=False, n=14):
+    # Alt zebra is so subtle we drop it entirely for KV rows (cleaner)
+    _fr(ws, row, n, C_WHITE)
+    c1 = _sc(ws, row, 1, label, bold=True, fg=C_TEXT_MUTED, bg=C_WHITE,
+             size=9, ha="left")
+    c1.border = _BOTTOM_BORDER
+    c2 = _sc(ws, row, 2, value if value not in (None, "") else "—",
+             fg=C_TEXT, bg=C_WHITE, size=9, ha="left", wrap=True)
+    c2.border = _BOTTOM_BORDER
+    # Extend bottom rule across remaining cols for a clean line
+    for col in range(3, n + 1):
+        ws.cell(row=row, column=col).border = _BOTTOM_BORDER
     ws.row_dimensions[row].height = 18
     return row + 1
 
-def _shdr(ws, row, title, n=14):
-    _fr(ws, row, n, C_SUB_HDR)
-    _sc(ws, row, 1, title, bold=True, bg=C_SUB_HDR, fg=C_LABEL, size=9)
-    ws.row_dimensions[row].height = 17
-    return row + 1
 
-def _kv(ws, row, label, value, alt=False, n=14):
-    bg = C_ALT if alt else C_WHITE
-    _fr(ws, row, n, bg)
-    _sc(ws, row, 1, label, bold=True, fg=C_LABEL, bg=bg, size=9)
-    _sc(ws, row, 2, str(value) if value else "—", fg=C_BLUE_IN, bg=bg, size=9, wrap=True)
-    ws.row_dimensions[row].height = 16
-    return row + 1
-
-def _drow(ws, row, vals, alt=False, als=None, h=15, n=None, cs=1):
-    bg = C_ALT if alt else C_WHITE
+# ── Data row: subtle zebra, bottom rule, right-align numeric columns ────────
+def _drow(ws, row, vals, alt=False, als=None, h=17, n=None, cs=1):
+    bg = C_ROW_ALT if alt else C_WHITE
     nc = n or (cs + len(vals) - 1)
     _fr(ws, row, nc, bg)
     for i, v in enumerate(vals):
         ha = als[i] if als and i < len(als) else "left"
-        fg = C_BLUE_IN if ha == "right" else C_BODY
-        _sc(ws, row, cs + i, str(v) if v is not None else "—", bg=bg, fg=fg, size=9, ha=ha)
+        c = _sc(ws, row, cs + i, v, bg=bg, fg=C_TEXT,
+                size=9, ha=ha, wrap=(ha == "left"))
+        c.border = _BOTTOM_BORDER
+    # Also apply bottom rule on any unused columns for clean line continuation
+    for col in range(cs + len(vals), nc + 1):
+        ws.cell(row=row, column=col).fill = PatternFill("solid", fgColor=bg)
+        ws.cell(row=row, column=col).border = _BOTTOM_BORDER
     ws.row_dimensions[row].height = h
     return row + 1
 
+
+# ── Subtotal row: pale-blue fill, bold navy text, top rule ──────────────────
 def _subtrow(ws, row, vals, n=14):
-    _fr(ws, row, n, C_SUBTOTAL)
+    _fr(ws, row, n, C_TOTAL_FILL)
     for i, v in enumerate(vals):
         ha = "left" if i == 0 else ("left" if i == len(vals) - 1 else "right")
-        _sc(ws, row, 1 + i, str(v) if v else "—", bold=True, bg=C_SUBTOTAL, fg=C_LABEL, size=9, ha=ha)
-    ws.row_dimensions[row].height = 16
+        c = _sc(ws, row, 1 + i, v, bold=True, bg=C_TOTAL_FILL,
+                fg=C_NAVY, size=9, ha=ha)
+        c.border = _BOTTOM_BORDER
+    ws.row_dimensions[row].height = 19
     return row + 1
 
-def _totrow(ws, row, vals, n=14, col=C_HDR2):
-    _fr(ws, row, n, col)
+
+# ── Total row: white fill, bold navy text, thick navy top rule ──────────────
+def _totrow(ws, row, vals, n=14, col=None):
+    _fr(ws, row, n, C_WHITE)
     for i, v in enumerate(vals):
         ha = "left" if i == 0 else ("left" if i == len(vals) - 1 else "right")
-        _sc(ws, row, 1 + i, str(v) if v else "—", bold=True, bg=col, fg=C_HDR_TEXT, size=9, ha=ha)
-    ws.row_dimensions[row].height = 18
+        c = _sc(ws, row, 1 + i, v, bold=True, bg=C_WHITE,
+                fg=C_NAVY, size=10, ha=ha)
+        c.border = Border(
+            top=Side(style="medium", color=C_NAVY),
+            bottom=Side(style="thin", color=C_NAVY)
+        )
+    ws.row_dimensions[row].height = 22
     return row + 1
 
+
+# ── NOI / hero row: navy fill, white text — used sparingly for key totals ───
 def _noirow(ws, row, vals, n=14):
-    _fr(ws, row, n, C_HDR3)
+    _fr(ws, row, n, C_NAVY)
     for i, v in enumerate(vals):
         ha = "left" if i == 0 else ("left" if i == len(vals) - 1 else "right")
-        _sc(ws, row, 1 + i, str(v) if v else "—", bold=True, bg=C_HDR3, fg=C_AMBER, size=10, ha=ha)
-    ws.row_dimensions[row].height = 20
+        _sc(ws, row, 1 + i, v, bold=True, bg=C_NAVY,
+            fg=C_WHITE, size=10, ha=ha)
+    ws.row_dimensions[row].height = 24
     return row + 1
 
-def _sp(ws, row): ws.row_dimensions[row].height = 6; return row + 1
 
+# ── Vertical spacer ─────────────────────────────────────────────────────────
+def _sp(ws, row, h=10):
+    ws.row_dimensions[row].height = h
+    return row + 1
+
+
+# ── Cover block: large title + thin navy underline + subtitle ───────────────
 def _cover(ws, row, line1, line2, n=14):
-    _fr(ws, row, n, C_HDR)
-    _sc(ws, row, 1, line1, bold=True, bg=C_HDR, fg=C_HDR_TEXT, size=13)
-    ws.row_dimensions[row].height = 28; row += 1
-    return _sp(ws, row)
+    # Big title — merge across all columns
+    _fr(ws, row, n, C_WHITE)
+    _sc(ws, row, 1, line1, bold=True, bg=C_WHITE,
+        fg=C_NAVY, size=18, ha="left", wrap=False)
+    try: ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=n)
+    except Exception: pass
+    ws.row_dimensions[row].height = 32
+    row += 1
+    # Subtitle (the property/broker/date strip) — also merged
+    _fr(ws, row, n, C_WHITE)
+    _sc(ws, row, 1, line2, bold=False, bg=C_WHITE,
+        fg=C_TEXT_MUTED, size=10, ha="left", wrap=False)
+    try: ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=n)
+    except Exception: pass
+    ws.row_dimensions[row].height = 18
+    row += 1
+    # Thin navy rule across the page
+    _fr(ws, row, n, C_WHITE)
+    for col in range(1, n + 1):
+        ws.cell(row=row, column=col).border = Border(
+            top=Side(style="medium", color=C_NAVY)
+        )
+    ws.row_dimensions[row].height = 4
+    row += 1
+    return _sp(ws, row, h=14)
+
+
+def _setup_sheet(ws, freeze_at="A6", tab_color=None,
+                 fit_to_width=True, landscape=True, margins=True):
+    """Pro polish per worksheet: no gridlines, tab color, print-fit-to-width,
+    landscape orientation, and clean margins.
+    NOTE: Frozen panes removed per user request — sheet scrolls normally."""
+    ws.sheet_view.showGridLines = False
+    ws.sheet_view.showRowColHeaders = True
+    # freeze_panes intentionally NOT set — full sheet scroll
+    if tab_color:
+        ws.sheet_properties.tabColor = tab_color
+    if fit_to_width:
+        ws.page_setup.fitToWidth = 1
+        ws.page_setup.fitToHeight = 0
+        ws.sheet_properties.pageSetUpPr.fitToPage = True
+    if landscape:
+        ws.page_setup.orientation = ws.ORIENTATION_LANDSCAPE
+    if margins:
+        ws.page_margins.left = 0.4
+        ws.page_margins.right = 0.4
+        ws.page_margins.top = 0.5
+        ws.page_margins.bottom = 0.5
+        ws.page_margins.header = 0.3
+        ws.page_margins.footer = 0.3
+    ws.print_options.horizontalCentered = True
+    # Footer with filename + page numbers
+    ws.oddFooter.left.text  = "&\"Calibri,Italic\"&8&K6B7280 Confidential — Internal Use Only"
+    ws.oddFooter.right.text = "&\"Calibri,Regular\"&8&K6B7280 Page &P of &N"
 
 
 def build_excel(d: dict, filename: str, sections: dict = None) -> bytes:
@@ -1056,7 +1296,7 @@ def build_excel(d: dict, filename: str, sections: dict = None) -> bytes:
     wb.remove(wb.active)
 
     ws1 = wb.create_sheet("Financials")
-    ws1.sheet_view.showGridLines = False
+    _setup_sheet(ws1, freeze_at="A6", tab_color="1E3A5F")
     _n_periods = len((d.get("financials") or {}).get("periods") or [])
     _data_w = 14 if _n_periods >= 6 else (16 if _n_periods >= 4 else 18)
     _notes_w = 30 if _n_periods >= 6 else 36
@@ -1104,14 +1344,33 @@ def build_excel(d: dict, filename: str, sections: dict = None) -> bytes:
             r = _thdr(ws1, r, ["Unit Type","Plan","Units","Mix %","SF / Unit",
                                 "In-Place Rent","In-Place PSF","Mkt Rent","Mkt PSF","Target Rent","Upside / Unit"])
             ra = ["left","left","center","center","right","right","right","right","right","right","right"]
+            # Compute Mix % directly from count/total to guarantee totals = 100%.
+            # The AI-returned "pct" field can be unreliable.
+            _total_units = sum(int(u.get("count") or 0) for u in umix) or 1
+            _total_sf_x_units = 0
+            _running_units = 0
             for i, u in enumerate(umix):
+                _cnt = int(u.get("count") or 0)
+                _running_units += _cnt
+                _mix_pct = (_cnt / _total_units) * 100 if _total_units else 0
+                _sf_val = u.get("sf") or 0
+                try: _total_sf_x_units += float(_sf_val) * _cnt
+                except: pass
                 r = _drow(ws1, r, [
                     _v(u.get("type","—")), u.get("plan") or "—", _v(u.get("count"),"n"),
-                    _pct(u.get("pct")), _v(u.get("sf"),"n"),
+                    f"{_mix_pct:.1f}%", _v(u.get("sf"),"n"),
                     _v(u.get("market_rent"),"$"), _psf(u.get('market_psf')),
                     _v(u.get("eff_rent"),"$"), _psf(u.get('eff_psf')),
                     _v(u.get("target_rent"),"$"), _v(u.get("upside"),"$"),
                 ], alt=bool(i % 2), als=ra)
+            # TOTAL row — verifies units sum and shows weighted-avg SF
+            _avg_sf = _total_sf_x_units / _total_units if _total_units else 0
+            r = _totrow(ws1, r, [
+                "TOTAL / AVG", "",
+                f"{_total_units}", "100.0%",
+                f"{int(_avg_sf):,}",
+                "", "", "", "", "", ""
+            ])
         else:
             r = _kv(ws1, r, "Note", "No unit mix data found.")
         r = _sp(ws1, r)
@@ -1232,7 +1491,7 @@ def build_excel(d: dict, filename: str, sections: dict = None) -> bytes:
             ("Exterior / Additional CapEx", _v(va.get("exterior_capex"), "$")),
             ("Monthly Rent Premium",        _v(va.get("monthly_premium"), "$")),
             ("Annual Rent Premium",         _v(va.get("annual_premium"), "$")),
-            ("Return on Investment",        f"{va.get('roi_pct') or 'N/A'}%"),
+            ("Return on Investment",        _pct(va.get('roi_pct'))),
             ("Value-Add Scope",             va.get("scope")),
         ]):
             r = _kv(ws1, r, k, v, alt=bool(i % 2))
@@ -1287,8 +1546,8 @@ def build_excel(d: dict, filename: str, sections: dict = None) -> bytes:
         if any(nf.get(k) for k in ["loan_type","lender","loan_to_value","interest_rate"]):
             r = _drow(ws1, r, [
                 nf.get("loan_type") or "—", nf.get("lender") or "—",
-                _v(nf.get("loan_amount"), "$"), f"{nf.get('loan_to_value') or 'N/A'}%",
-                f"{nf.get('interest_rate') or 'N/A'}%", nf.get("rate_type") or "—",
+                _v(nf.get("loan_amount"), "$"), _pct(nf.get('loan_to_value')),
+                _pct(nf.get('interest_rate')), nf.get("rate_type") or "—",
                 nf.get("loan_term_years") or "—", nf.get("amortization_years") or "—",
                 nf.get("interest_only_period") or "—", nf.get("dscr") or "—",
                 nf.get("recourse") or "—", nf.get("notes") or "—",
@@ -1327,24 +1586,7 @@ def build_excel(d: dict, filename: str, sections: dict = None) -> bytes:
             _sc(ws1, r, 1, msg, bg=C_ALT, fg=C_BODY, size=9, italic=True)
             ws1.row_dimensions[r].height = 15; r += 1
         r = _sp(ws1, r)
-    if _on('flags'):
-
-        r = _sec(ws1, r, "F.  UNDERWRITING FLAGS")
-        flag_bg = {"Warning": C_WARN, "Opportunity": C_GREEN_L, "Info": C_BLUE_L, "Verify": C_PURPLE_L}
-        if flags:
-            r = _thdr(ws1, r, ["Category", "Flag Title", "Detail"])
-            for f in flags:
-                cat = f.get("category", "Info")
-                bg  = flag_bg.get(cat, C_WHITE)
-                _sc(ws1, r, 1, cat, bold=True, bg=bg, size=9, fg=C_LABEL)
-                _sc(ws1, r, 2, f.get("title", ""), bold=True, bg=bg, size=9, fg=C_LABEL)
-                _sc(ws1, r, 3, f.get("detail", ""), bg=bg, size=9, fg=C_BODY, wrap=True)
-                for col in range(4, 15):
-                    ws1.cell(row=r, column=col).fill = PatternFill("solid", fgColor=bg)
-                ws1.row_dimensions[r].height = 28; r += 1
-        else:
-            r = _kv(ws1, r, "Note", "No flags generated.")
-        r = _sp(ws1, r)
+    # NOTE: Underwriting Flags moved to dedicated "Flags" tab (ws4) for readability
     if _on('tax'):
 
         r = _sec(ws1, r, "G.  PROPERTY TAX & TAX ABATEMENT")
@@ -1363,9 +1605,9 @@ def build_excel(d: dict, filename: str, sections: dict = None) -> bytes:
         r = _shdr(ws1, r, "Tax Abatement Program")
         for i, (k, v) in enumerate([
             ("Program",               tax.get("abatement_program")),
-            ("Abatement %",           f"{tax.get('abatement_pct') or 'N/A'}%"),
+            ("Abatement %",           _pct(tax.get('abatement_pct'))),
             ("Commitment Term",       tax.get("abatement_term_note")),
-            ("AMI Requirement",       f"{tax.get('ami_pct') or 'N/A'}% of Area Median Income"),
+            ("AMI Requirement",       f"{_pct(tax.get('ami_pct'))} of Area Median Income"),
             ("Annual Tax Savings",    _v(tax.get("abatement_annual_savings"), "$")),
             ("Max Allowable Rent",    _v(tax.get("max_allowable_rent"), "$")),
             ("Avg In-Place Rent",     _v(tax.get("avg_inplace_rent"), "$")),
@@ -1408,7 +1650,7 @@ def build_excel(d: dict, filename: str, sections: dict = None) -> bytes:
                 ("Total Replacement", _v(repl.get("total") or repl.get("gross_replacement_total"), "$")),
                 ("Land Per Unit",     _v(repl.get("land_per_unit"), "$")),
                 ("Hard Cost Per SF",  _v(repl.get("hard_cost_per_sf"), "$")),
-                ("Soft Cost %",       f"{repl.get('soft_cost_pct') or 'N/A'}%"),
+                ("Soft Cost %",       _pct(repl.get('soft_cost_pct'))),
                 ("Source",            repl.get("source")),
                 ("Notes",             repl.get("notes")),
             ]):
@@ -1424,7 +1666,7 @@ def build_excel(d: dict, filename: str, sections: dict = None) -> bytes:
             r = _kv(ws1, r, k, v, alt=bool(i % 2))
         r = _shdr(ws1, r, "Property Management")
         for i, (k, v) in enumerate([
-            ("Management Fee %",   f"{mgmt.get('fee_pct') or 'N/A'}% of EGI"),
+            ("Management Fee %",   f"{_pct(mgmt.get('fee_pct'))} of EGI"),
             ("Annual Fee",         _v(mgmt.get("fee_annual"), "$")),
             ("Per Unit / Year",    _v(mgmt.get("fee_per_unit"), "$")),
             ("Current Manager",    mgmt.get("current_manager")),
@@ -1440,7 +1682,7 @@ def build_excel(d: dict, filename: str, sections: dict = None) -> bytes:
         ws1.row_dimensions[r].height = 13
 
     ws2 = wb.create_sheet("Comparables")
-    ws2.sheet_view.showGridLines = False
+    _setup_sheet(ws2, freeze_at="A6", tab_color="1E3A5F")
     for col, w in {"A":30,"B":14,"C":10,"D":10,"E":10,"F":12,
                    "G":12,"H":12,"I":12,"J":10,"K":32}.items():
         ws2.column_dimensions[col].width = w
@@ -1540,7 +1782,7 @@ def build_excel(d: dict, filename: str, sections: dict = None) -> bytes:
     ws2.row_dimensions[r].height = 13
 
     ws3 = wb.create_sheet("Demographics")
-    ws3.sheet_view.showGridLines = False
+    _setup_sheet(ws3, freeze_at="A6", tab_color="1E3A5F")
     for col, w in {"A":36,"B":20,"C":20,"D":20,"E":14,"F":42}.items():
         ws3.column_dimensions[col].width = w
 
@@ -1750,6 +1992,75 @@ def build_excel(d: dict, filename: str, sections: dict = None) -> bytes:
         bg=C_ALT, fg="FF888880", size=8, italic=True)
     ws3.row_dimensions[r].height = 13
 
+    # ══════════════════════════════════════════════════════════════════════════
+    # TAB 4 — UNDERWRITING FLAGS (dedicated sheet, properly sized columns)
+    # ══════════════════════════════════════════════════════════════════════════
+    if _on('flags'):
+        ws4 = wb.create_sheet("Flags")
+        _setup_sheet(ws4, freeze_at="A6", tab_color="1E3A5F")
+        # Generous Detail column so flag text reads naturally
+        ws4.column_dimensions["A"].width = 14   # Category
+        ws4.column_dimensions["B"].width = 32   # Title
+        ws4.column_dimensions["C"].width = 80   # Detail — wide
+        # Trailing columns kept narrow so colored band doesn't extend forever
+        for _letter in "DEFG":
+            ws4.column_dimensions[_letter].width = 2
+
+        r = 1
+        r = _cover(ws4, r, f"UNDERWRITING FLAGS  |  {prop}", subtitle, n=3)
+        r = _sec(ws4, r, "RISK FLAGS & UPSIDE OBSERVATIONS", n=3)
+        r = _thdr(ws4, r, ["Category", "Flag", "Detail"], n=3)
+
+        flag_bg_map = {
+            "Warning": C_WARN, "Caution": C_WARN, "Risk": C_WARN,
+            "Opportunity": C_GREEN_L, "Upside": C_GREEN_L,
+            "Info": C_BLUE_L,
+            "Verify": C_PURPLE_L, "Verification": C_PURPLE_L
+        }
+        flag_fg_map = {
+            "Warning": "FF92400E", "Caution": "FF92400E", "Risk": "FF92400E",
+            "Opportunity": "FF065F46", "Upside": "FF065F46",
+            "Info": "FF1E3A8A",
+            "Verify": "FF5B21B6", "Verification": "FF5B21B6"
+        }
+
+        if flags:
+            for f in flags:
+                cat = f.get("category", "Info")
+                bg  = flag_bg_map.get(cat, C_WHITE)
+                fg  = flag_fg_map.get(cat, C_TEXT)
+                # Category cell — colored chip
+                _sc(ws4, r, 1, cat.upper(), bold=True, bg=bg, fg=fg,
+                    size=9, ha="center", wrap=False)
+                ws4.cell(row=r, column=1).border = _BOTTOM_BORDER
+                # Title cell — bold dark text on white
+                _sc(ws4, r, 2, f.get("title", ""), bold=True, bg=C_WHITE,
+                    fg=C_NAVY, size=10, ha="left", wrap=True)
+                ws4.cell(row=r, column=2).border = _BOTTOM_BORDER
+                # Detail cell — body text wrapped on white
+                _sc(ws4, r, 3, f.get("detail", ""), bg=C_WHITE,
+                    fg=C_TEXT, size=9, ha="left", wrap=True)
+                ws4.cell(row=r, column=3).border = _BOTTOM_BORDER
+                # Estimate height based on detail length
+                detail_len = len(f.get("detail", ""))
+                approx_lines = max(1, -(-detail_len // 90))   # 90 chars/line at width 80
+                ws4.row_dimensions[r].height = max(36, approx_lines * 15 + 8)
+                r += 1
+            r = _sp(ws4, r)
+        else:
+            r = _kv(ws4, r, "Note", "No underwriting flags generated.", n=3)
+
+        # Footer
+        _fr(ws4, r, 3, C_WHITE)
+        for col in range(1, 4):
+            ws4.cell(row=r, column=col).border = _BOTTOM_BORDER
+        _sc(ws4, r, 1,
+            "AI-generated from broker OM. Internal use only. Verify all figures independently. Powered by Anthropic Claude.",
+            bg=C_WHITE, fg=C_TEXT_MUTED, size=8, italic=True, wrap=False)
+        try: ws4.merge_cells(start_row=r, start_column=1, end_row=r, end_column=3)
+        except Exception: pass
+        ws4.row_dimensions[r].height = 16
+
     # ── Auto-adjust row heights based on content length & column width ──
     def _auto_fit_rows(ws):
         col_widths = {}
@@ -1784,6 +2095,10 @@ def build_excel(d: dict, filename: str, sections: dict = None) -> bytes:
                 ws.row_dimensions[r_idx].height = target
 
     for sheet in wb.worksheets:
+        # Flags sheet has manually-tuned row heights based on detail length;
+        # skip auto-fit (which caps at 80pt and would clip long flag detail rows).
+        if sheet.title == "Flags":
+            continue
         _auto_fit_rows(sheet)
 
     buf = io.BytesIO()
@@ -1964,16 +2279,7 @@ with main_col:
 </div>
 """, unsafe_allow_html=True)
 
-    # ── DIAGNOSTIC: shows current session state at top of every run ──
-    _diag_box = st.container()
-    with _diag_box:
-        _has_data  = "analysis_data" in st.session_state
-        _has_err   = "last_error" in st.session_state
-        _has_xlsx  = "analysis_excel_bytes" in st.session_state
-        st.info(f"🔍 DIAG: analysis_data={_has_data} | last_error={_has_err} | excel_bytes={_has_xlsx}")
-
     if st.button("🔍  Analyze Offering Memorandum", type="primary", use_container_width=True):
-        st.warning("🟡 DIAG: Analyze button clicked — entering try block")
         progress_bar = st.progress(0, text="Starting...")
         status_box   = st.empty()
 
@@ -1990,7 +2296,6 @@ with main_col:
                 tmp_path = tmp.name
             pdf_text = extract_pdf_text(tmp_path)
             os.unlink(tmp_path)
-            st.warning(f"🟡 DIAG: PDF extracted, {len(pdf_text)} chars")
 
             if not pdf_text or len(pdf_text.strip()) < 200:
                 progress_bar.empty(); status_box.empty()
@@ -1999,9 +2304,7 @@ with main_col:
 
             set_progress(30, f"Extracted {len(pdf_text):,} characters. Sending to Claude AI…")
             def log(msg): set_progress(55, msg)
-            st.warning("🟡 DIAG: about to call Claude API...")
             data = analyze_om(pdf_text, api_key, log)
-            st.warning(f"🟡 DIAG: Claude returned, type={type(data).__name__}, keys={list(data.keys())[:5] if isinstance(data, dict) else 'NOT A DICT'}")
 
             set_progress(75, "Generating Excel report…")
             sections = {
@@ -2015,9 +2318,7 @@ with main_col:
                 "afford":    sel_afford,   "schools":   sel_schools,
                 "employers": sel_employers,"market":    sel_market,
             }
-            st.warning("🟡 DIAG: about to build Excel...")
             excel_bytes = build_excel(data, uploaded.name, sections=sections)
-            st.warning(f"🟡 DIAG: Excel built, {len(excel_bytes)} bytes")
             set_progress(100, "Done!")
             progress_bar.empty(); status_box.empty()
 
@@ -2027,14 +2328,17 @@ with main_col:
             st.session_state["analysis_filename"]    = uploaded.name
             st.session_state["analysis_prop_name"]   = (data.get("property") or {}).get("name") or "Property"
             st.session_state["analysis_broker_name"] = (data.get("broker")   or {}).get("name") or "Unknown broker"
-            st.success("🟢 DIAG: session_state populated successfully — results should render below")
+            # Clear any stale error from a previous failed run
+            st.session_state.pop("last_error", None)
 
         except Exception as e:
             progress_bar.empty(); status_box.empty()
             import traceback
             tb = traceback.format_exc()
+            # Persist to session_state so it survives reruns / websocket drops.
+            # The error renders OUTSIDE this button block so it can't be hidden
+            # by st.stop() or by the websocket dying mid-traceback.
             st.session_state["last_error"] = f"{type(e).__name__}: {e}\n\n{tb}"
-            st.error(f"🔴 DIAG: caught exception — {type(e).__name__}: {e}")
 
     # ══════════════════════════════════════════════════════════════════════
     # ── Persistent error display — shows even after a websocket drop ──
@@ -2076,22 +2380,24 @@ with main_col:
             from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
             from openpyxl.utils import get_column_letter as _col
 
-            # Reuse the same colour palette as the main report
-            HDR      = C_HDR        # navy section bar
-            HDR2     = C_HDR2       # cover line 2
-            HDR3     = C_HDR3       # NOI/cash flow accent
-            SUB_HDR  = C_SUB_HDR    # column headers (light grey)
-            HDR_TXT  = C_HDR_TEXT   # off-white text on navy
-            AMBER    = C_AMBER
-            BLUE_IN  = C_BLUE_IN
-            LBL      = C_LABEL
-            BODY     = C_BODY
+            # ── Use the SAME palette tokens as the main report ──
+            HDR      = C_NAVY
+            HDR2     = C_NAVY
+            HDR3     = C_NAVY
+            SUB_HDR  = C_SUB_FILL
+            HDR_TXT  = C_WHITE
+            AMBER    = C_WHITE   # totals on navy = white
+            BLUE_IN  = C_TEXT
+            LBL      = C_TEXT_MUTED
+            BODY     = C_TEXT
             WHITE    = C_WHITE
-            ALT      = C_ALT
-            BORDER   = C_BORDER
+            ALT      = C_ROW_ALT
+            BORDER   = C_DIVIDER
 
-            _side = Side(style="thin", color=BORDER)
-            _bord = Border(left=_side, right=_side, top=_side, bottom=_side)
+            _bord_bottom = Border(bottom=Side(style="thin", color=BORDER))
+            _bord_thick  = Border(bottom=Side(style="medium", color=HDR))
+            _bord_top    = Border(top=Side(style="medium", color=HDR))
+            _bord_none   = Border()
 
             prop_x   = (d.get("property") or {}).get("name") or "Property"
             broker_x = (d.get("broker") or {}).get("name") or "N/A"
@@ -2110,14 +2416,31 @@ with main_col:
             wb_s.remove(wb_s.active)
 
             def _set_cell(ws, row, col, val, *, bold=False, bg=None, fg=BODY,
-                          size=9, ha="left", italic=False, wrap=True):
+                          size=9, ha="left", italic=False, wrap=True, border=None):
+                """Set a cell with numeric auto-detection + clean borders."""
                 c = ws.cell(row=row, column=col)
-                c.value = val
-                c.font = Font(name="Calibri", bold=bold, color=fg, size=size, italic=italic)
-                c.alignment = Alignment(horizontal=ha, vertical="center", wrap_text=wrap)
+                final_fg = fg
+
+                # Auto-promote numeric strings to real Excel numbers
+                if val is not None and val != "" and val != "—":
+                    num_val, fmt = _parse_numeric(val)
+                    if num_val is not None:
+                        c.value = num_val
+                        c.number_format = fmt
+                        if num_val < 0 and not bold:
+                            final_fg = C_NEG
+                    else:
+                        c.value = val
+                else:
+                    c.value = val if val not in (None, "") else "—"
+
+                c.font = Font(name="Calibri", bold=bold, color=final_fg,
+                              size=size, italic=italic)
+                c.alignment = Alignment(horizontal=ha, vertical="center",
+                                        wrap_text=wrap)
                 if bg:
                     c.fill = PatternFill("solid", fgColor=bg)
-                c.border = _bord
+                c.border = border if border is not None else _bord_none
                 return c
 
             def _fill_row(ws, row, ncols, bg):
@@ -2125,23 +2448,47 @@ with main_col:
                     ws.cell(row=row, column=c).fill = PatternFill("solid", fgColor=bg)
 
             def _cover_block(ws, line1, line2, ncols):
-                _fill_row(ws, 1, ncols, HDR)
-                _set_cell(ws, 1, 1, line1, bold=True, bg=HDR, fg=HDR_TXT, size=13)
-                ws.row_dimensions[1].height = 28
-                ws.row_dimensions[2].height = 6  # spacer (matches main report)
-                return 3
+                # Big navy title on white — merged across cols
+                _fill_row(ws, 1, ncols, WHITE)
+                _set_cell(ws, 1, 1, line1, bold=True, bg=WHITE, fg=HDR,
+                          size=18, ha="left", wrap=False)
+                try: ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=ncols)
+                except Exception: pass
+                ws.row_dimensions[1].height = 32
+
+                # Subtitle in muted grey — merged
+                _fill_row(ws, 2, ncols, WHITE)
+                _set_cell(ws, 2, 1, line2, bold=False, bg=WHITE, fg=LBL,
+                          size=10, ha="left", wrap=False)
+                try: ws.merge_cells(start_row=2, start_column=1, end_row=2, end_column=ncols)
+                except Exception: pass
+                ws.row_dimensions[2].height = 18
+
+                # Thin navy rule
+                _fill_row(ws, 3, ncols, WHITE)
+                for col in range(1, ncols + 1):
+                    ws.cell(row=3, column=col).border = _bord_top
+                ws.row_dimensions[3].height = 4
+
+                # Spacer
+                ws.row_dimensions[4].height = 12
+                return 5
 
             def _section_header(ws, row, title, ncols):
                 _fill_row(ws, row, ncols, HDR)
-                _set_cell(ws, row, 1, title, bold=True, bg=HDR, fg=HDR_TXT, size=11)
-                ws.row_dimensions[row].height = 22
+                _set_cell(ws, row, 1, title, bold=True, bg=HDR, fg=HDR_TXT,
+                          size=11, ha="left", wrap=False)
+                try: ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=ncols)
+                except Exception: pass
+                ws.row_dimensions[row].height = 26
                 return row + 1
 
             def _column_headers(ws, row, headers):
                 _fill_row(ws, row, len(headers), SUB_HDR)
                 for i, h in enumerate(headers):
-                    _set_cell(ws, row, 1 + i, h, bold=True, bg=SUB_HDR, fg=LBL, size=9, ha="center")
-                ws.row_dimensions[row].height = 18
+                    _set_cell(ws, row, 1 + i, h, bold=True, bg=SUB_HDR,
+                              fg=HDR, size=9, ha="center", border=_bord_thick)
+                ws.row_dimensions[row].height = 22
                 return row + 1
 
             def _data_row(ws, row, vals, alts=None, alt_bg=False):
@@ -2149,29 +2496,33 @@ with main_col:
                 _fill_row(ws, row, len(vals), bg)
                 for i, v in enumerate(vals):
                     ha = alts[i] if alts and i < len(alts) else "left"
-                    fg = BLUE_IN if ha == "right" else BODY
-                    _set_cell(ws, row, 1 + i, v if v is not None else "—",
-                              bg=bg, fg=fg, size=9, ha=ha)
-                ws.row_dimensions[row].height = 16
+                    _set_cell(ws, row, 1 + i, v, bg=bg, fg=BODY,
+                              size=9, ha=ha, wrap=(ha == "left"),
+                              border=_bord_bottom)
+                ws.row_dimensions[row].height = 17
                 return row + 1
 
-            def _accent_row(ws, row, vals, ncols, color=HDR3):
-                """Highlighted row (e.g. NOI, totals) — like _noirow in main report"""
-                _fill_row(ws, row, ncols, color)
+            def _accent_row(ws, row, vals, ncols, color=None):
+                """Highlighted total row — navy fill, white bold text."""
+                fill_color = color or HDR
+                _fill_row(ws, row, ncols, fill_color)
                 for i, v in enumerate(vals):
                     ha = "left" if i == 0 else "right"
-                    _set_cell(ws, row, 1 + i, v if v is not None else "—",
-                              bold=True, bg=color, fg=AMBER, size=10, ha=ha)
-                ws.row_dimensions[row].height = 20
+                    _set_cell(ws, row, 1 + i, v, bold=True, bg=fill_color,
+                              fg=HDR_TXT, size=10, ha=ha)
+                ws.row_dimensions[row].height = 24
                 return row + 1
 
             def _kv_row(ws, row, label, value, ncols, alt_bg=False):
-                bg = ALT if alt_bg else WHITE
-                _fill_row(ws, row, ncols, bg)
-                _set_cell(ws, row, 1, label, bold=True, bg=bg, fg=LBL, size=9)
-                _set_cell(ws, row, 2, str(value) if value is not None and value != "" else "—",
-                          bg=bg, fg=BLUE_IN, size=9)
-                ws.row_dimensions[row].height = 16
+                _fill_row(ws, row, ncols, WHITE)
+                _set_cell(ws, row, 1, label, bold=True, bg=WHITE, fg=LBL,
+                          size=9, border=_bord_bottom)
+                _set_cell(ws, row, 2, value, bg=WHITE, fg=BODY, size=9,
+                          ha="left", border=_bord_bottom)
+                # Extend bottom rule across remaining cols for clean line
+                for col in range(3, ncols + 1):
+                    ws.cell(row=row, column=col).border = _bord_bottom
+                ws.row_dimensions[row].height = 18
                 return row + 1
 
             def _autosize_columns(ws, widths):
@@ -2179,44 +2530,75 @@ with main_col:
                     ws.column_dimensions[col_letter].width = w
 
             def _add_footer(ws, row, ncols):
-                ws.row_dimensions[row].height = 6
+                ws.row_dimensions[row].height = 10
                 row += 1
-                _fill_row(ws, row, ncols, ALT)
+                _fill_row(ws, row, ncols, WHITE)
+                # Thin top rule above footer
+                for col in range(1, ncols + 1):
+                    ws.cell(row=row, column=col).border = _bord_bottom
                 _set_cell(ws, row, 1,
-                          "AI-generated. Internal use only. Verify all figures independently. "
-                          "Powered by Anthropic Claude.",
-                          bg=ALT, fg="FF888880", size=8, italic=True)
-                ws.row_dimensions[row].height = 13
+                          "AI-generated. Internal use only. Verify all figures "
+                          "independently. Powered by Anthropic Claude.",
+                          bg=WHITE, fg=LBL, size=8, italic=True, wrap=False,
+                          border=_bord_bottom)
+                try: ws.merge_cells(start_row=row, start_column=1,
+                                    end_row=row, end_column=ncols)
+                except Exception: pass
+                ws.row_dimensions[row].height = 16
 
             # ────────────────────────────────────────────────────────────────
             # Sheet 1 — Unit Mix
             # ────────────────────────────────────────────────────────────────
             ws = wb_s.create_sheet("Unit Mix")
-            ws.sheet_view.showGridLines = False
-            _autosize_columns(ws, {"A":18,"B":12,"C":12,"D":12,"E":14,"F":14,"G":14,"H":14})
-            r = _cover_block(ws, "UNIT MIX SUMMARY", subtitle_x, 8)
-            r = _section_header(ws, r, "A.  UNIT MIX BY FLOOR PLAN", 8)
+            _setup_sheet(ws, freeze_at="A6", tab_color="1E3A5F")
+            _autosize_columns(ws, {"A":18,"B":18,"C":10,"D":10,"E":10,
+                                    "F":14,"G":14,"H":14,"I":14})
+            r = _cover_block(ws, "UNIT MIX SUMMARY", subtitle_x, 9)
+            r = _section_header(ws, r, "A.  UNIT MIX BY FLOOR PLAN", 9)
             umix_x = d.get("unit_mix") or []
             if umix_x:
-                r = _column_headers(ws, r, ["Type","Plan","Units","SF","Market Rent",
-                                             "Eff. Rent","Target Rent","Upside/Unit"])
-                aligns = ["left","left","center","right","right","right","right","right"]
+                r = _column_headers(ws, r, ["Type","Plan","Units","Mix %","SF",
+                                             "Market Rent","Eff. Rent",
+                                             "Target Rent","Upside/Unit"])
+                aligns = ["left","left","center","center","right",
+                          "right","right","right","right"]
+                # Compute mix % from count/total to guarantee sum = 100%
+                _total_units = sum(int(u.get("count") or 0) for u in umix_x) or 1
+                _total_sf_x_units = 0
                 for i, u in enumerate(umix_x):
+                    _cnt = int(u.get("count") or 0)
+                    _mix_pct = (_cnt / _total_units) * 100 if _total_units else 0
+                    _sf_val = u.get("sf") or 0
+                    try: _total_sf_x_units += float(_sf_val) * _cnt
+                    except: pass
                     r = _data_row(ws, r, [
                         u.get("type"), u.get("plan"),
-                        _v(u.get("count"), "n"), _v(u.get("sf"), "n"),
+                        _v(u.get("count"), "n"), f"{_mix_pct:.1f}%",
+                        _v(u.get("sf"), "n"),
                         _v(u.get("market_rent"), "$"), _v(u.get("eff_rent"), "$"),
                         _v(u.get("target_rent"), "$"), _v(u.get("upside"), "$"),
                     ], alts=aligns, alt_bg=bool(i % 2))
+                # TOTAL row
+                _avg_sf = _total_sf_x_units / _total_units if _total_units else 0
+                _fill_row(ws, r, 9, HDR)
+                for _i, _val in enumerate([
+                    "TOTAL / AVG", "", f"{_total_units}", "100.0%",
+                    f"{int(_avg_sf):,}", "", "", "", ""
+                ]):
+                    _ha = "left" if _i == 0 else ("center" if _i in (2, 3) else "right")
+                    _set_cell(ws, r, 1 + _i, _val, bold=True, bg=HDR,
+                              fg=HDR_TXT, size=10, ha=_ha)
+                ws.row_dimensions[r].height = 24
+                r += 1
             else:
-                r = _kv_row(ws, r, "Note", "No unit mix data extracted.", 8)
-            _add_footer(ws, r, 8)
+                r = _kv_row(ws, r, "Note", "No unit mix data extracted.", 9)
+            _add_footer(ws, r, 9)
 
             # ────────────────────────────────────────────────────────────────
             # Sheet 2 — Value-Add
             # ────────────────────────────────────────────────────────────────
             ws = wb_s.create_sheet("Value-Add")
-            ws.sheet_view.showGridLines = False
+            _setup_sheet(ws, freeze_at="A6", tab_color="1E3A5F")
             _autosize_columns(ws, {"A":18,"B":10,"C":10,"D":14,"E":14,"F":14,"G":16,"H":30})
             r = _cover_block(ws, "VALUE-ADD SUMMARY", subtitle_x, 8)
 
@@ -2267,7 +2649,7 @@ with main_col:
                 ("Exterior / Additional CapEx", _v(va_x.get("exterior_capex"), "$")),
                 ("Monthly Rent Premium",        _v(va_x.get("monthly_premium"), "$")),
                 ("Annual Rent Premium",         _v(va_x.get("annual_premium"), "$")),
-                ("Return on Investment",        f"{va_x.get('roi_pct') or 'N/A'}%"),
+                ("Return on Investment",        _pct(va_x.get('roi_pct'))),
             ]):
                 r = _kv_row(ws, r, k, v, 8, alt_bg=bool(i % 2))
             _add_footer(ws, r, 8)
@@ -2276,7 +2658,7 @@ with main_col:
             # Sheet 3 — Rent Comps
             # ────────────────────────────────────────────────────────────────
             ws = wb_s.create_sheet("Rent Comps")
-            ws.sheet_view.showGridLines = False
+            _setup_sheet(ws, freeze_at="A6", tab_color="1E3A5F")
             _autosize_columns(ws, {"A":24,"B":12,"C":10,"D":10,"E":12,"F":14,"G":14,"H":10,"I":24})
             r = _cover_block(ws, "RENT COMPARABLES SUMMARY", subtitle_x, 9)
 
@@ -2339,7 +2721,7 @@ with main_col:
             # Sheet 4 — Financials
             # ────────────────────────────────────────────────────────────────
             ws = wb_s.create_sheet("Financials")
-            ws.sheet_view.showGridLines = False
+            _setup_sheet(ws, freeze_at="A6", tab_color="1E3A5F")
             fin_x     = d.get("financials") or {}
             periods_x = (fin_x.get("periods") or [])[:7]
             inc_x     = fin_x.get("income_lines")  or []
@@ -2414,7 +2796,7 @@ with main_col:
             # Sheet 5 — Tax & Abatement
             # ────────────────────────────────────────────────────────────────
             ws = wb_s.create_sheet("Tax & Abatement")
-            ws.sheet_view.showGridLines = False
+            _setup_sheet(ws, freeze_at="A6", tab_color="1E3A5F")
             _autosize_columns(ws, {"A":32,"B":40})
             r = _cover_block(ws, "TAX & ABATEMENT SUMMARY", subtitle_x, 2)
 
@@ -2437,7 +2819,7 @@ with main_col:
 
             ab_rows = [
                 ("Program",            tax_x.get("abatement_program")),
-                ("Abatement %",        f"{tax_x.get('abatement_pct') or 'N/A'}%" if tax_x.get("abatement_pct") else None),
+                ("Abatement %",        _pct(tax_x.get('abatement_pct')) if tax_x.get("abatement_pct") else None),
                 ("Commitment Term",    tax_x.get("abatement_term_note")),
                 ("Annual Tax Savings", _v(tax_x.get("abatement_annual_savings"), "$") if tax_x.get("abatement_annual_savings") else None),
                 ("Max Allowable Rent", _v(tax_x.get("max_allowable_rent"), "$") if tax_x.get("max_allowable_rent") else None),
@@ -2459,7 +2841,7 @@ with main_col:
             # Sheet 6 — Demographics
             # ────────────────────────────────────────────────────────────────
             ws = wb_s.create_sheet("Demographics")
-            ws.sheet_view.showGridLines = False
+            _setup_sheet(ws, freeze_at="A6", tab_color="1E3A5F")
             _autosize_columns(ws, {"A":34,"B":18,"C":18,"D":18})
             r = _cover_block(ws, "DEMOGRAPHICS SUMMARY", subtitle_x, 4)
             r = _section_header(ws, r, "A.  POPULATION & INCOME", 4)
@@ -2489,7 +2871,7 @@ with main_col:
             # Sheet 7 — Financing
             # ────────────────────────────────────────────────────────────────
             ws = wb_s.create_sheet("Financing")
-            ws.sheet_view.showGridLines = False
+            _setup_sheet(ws, freeze_at="A6", tab_color="1E3A5F")
             _autosize_columns(ws, {"A":32,"B":40})
             r = _cover_block(ws, "FINANCING SUMMARY", subtitle_x, 2)
 
@@ -2541,27 +2923,51 @@ with main_col:
             _add_footer(ws, r, 2)
 
             # ────────────────────────────────────────────────────────────────
-            # Sheet 8 — Flags
+            # Sheet 8 — Flags (dedicated, with wide Detail column for readability)
             # ────────────────────────────────────────────────────────────────
             ws = wb_s.create_sheet("Flags")
-            ws.sheet_view.showGridLines = False
-            _autosize_columns(ws, {"A":14,"B":28,"C":60})
+            _setup_sheet(ws, freeze_at="A6", tab_color="1E3A5F")
+            # Wider Detail column so flag text reads naturally
+            _autosize_columns(ws, {"A":14, "B":32, "C":80,
+                                    "D":2, "E":2, "F":2})
             r = _cover_block(ws, "UNDERWRITING FLAGS", subtitle_x, 3)
-            r = _section_header(ws, r, "A.  FLAGS GENERATED FROM OM", 3)
+            r = _section_header(ws, r, "RISK FLAGS & UPSIDE OBSERVATIONS", 3)
+            r = _column_headers(ws, r, ["Category", "Flag", "Detail"])
 
             flags_x = d.get("flags") or []
             if flags_x:
-                r = _column_headers(ws, r, ["Category", "Title", "Detail"])
-                # Same colour scheme as main report
-                flag_bg = {"Warning": C_WARN, "Opportunity": C_GREEN_L,
-                           "Info": C_BLUE_L, "Verify": C_PURPLE_L}
+                flag_bg_map = {
+                    "Warning": C_WARN, "Caution": C_WARN, "Risk": C_WARN,
+                    "Opportunity": C_GREEN_L, "Upside": C_GREEN_L,
+                    "Info": C_BLUE_L,
+                    "Verify": C_PURPLE_L, "Verification": C_PURPLE_L
+                }
+                flag_fg_map = {
+                    "Warning": "FF92400E", "Caution": "FF92400E", "Risk": "FF92400E",
+                    "Opportunity": "FF065F46", "Upside": "FF065F46",
+                    "Info": "FF1E3A8A",
+                    "Verify": "FF5B21B6", "Verification": "FF5B21B6"
+                }
                 for fl in flags_x:
                     cat = fl.get("category", "Info")
-                    bg  = flag_bg.get(cat, WHITE)
-                    _set_cell(ws, r, 1, cat,            bold=True, bg=bg, fg=LBL,  size=9)
-                    _set_cell(ws, r, 2, fl.get("title", ""),  bold=True, bg=bg, fg=LBL,  size=9)
-                    _set_cell(ws, r, 3, fl.get("detail", ""),            bg=bg, fg=BODY, size=9)
-                    ws.row_dimensions[r].height = 28
+                    bg  = flag_bg_map.get(cat, WHITE)
+                    fg  = flag_fg_map.get(cat, BODY)
+                    # Colored category chip
+                    _set_cell(ws, r, 1, cat.upper(), bold=True, bg=bg,
+                              fg=fg, size=9, ha="center", wrap=False,
+                              border=_bord_bottom)
+                    # Bold navy title on white
+                    _set_cell(ws, r, 2, fl.get("title", ""), bold=True,
+                              bg=WHITE, fg=HDR, size=10, ha="left",
+                              wrap=True, border=_bord_bottom)
+                    # Detail body text on white, wrapped
+                    _set_cell(ws, r, 3, fl.get("detail", ""),
+                              bg=WHITE, fg=BODY, size=9, ha="left",
+                              wrap=True, border=_bord_bottom)
+                    # Tune row height by detail length
+                    detail_len = len(fl.get("detail", ""))
+                    approx_lines = max(1, -(-detail_len // 90))
+                    ws.row_dimensions[r].height = max(36, approx_lines * 15 + 8)
                     r += 1
             else:
                 r = _kv_row(ws, r, "Note", "No flags generated.", 3)
@@ -2570,6 +2976,10 @@ with main_col:
 
             # ── Auto-fit row heights on every sheet ──
             for sheet in wb_s.worksheets:
+                # Flags sheet has manually-tuned row heights for long detail text;
+                # skip auto-fit so heights don't get clipped at 80pt.
+                if sheet.title == "Flags":
+                    continue
                 col_widths = {}
                 for letter, dim in sheet.column_dimensions.items():
                     if dim.width:
