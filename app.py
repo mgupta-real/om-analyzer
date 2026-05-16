@@ -18,6 +18,17 @@ st.set_page_config(
 # AUTH GATE — must come right after set_page_config
 # ══════════════════════════════════════════════════════════════════════════════
 from auth import login_page, logout
+
+# Handle sign-out FIRST, before the auth gate or any UI renders.
+# The navbar's "Sign out" link sets ?signout=1; we clear session + URL here.
+if st.query_params.get("signout") == "1":
+    try:
+        st.query_params.clear()
+    except Exception:
+        pass
+    st.session_state.clear()
+    st.rerun()
+
 if "user" not in st.session_state:
     login_page()
     st.stop()
@@ -2278,10 +2289,7 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-# Handle sign-out triggered by the profile-menu link (?signout=1)
-if st.query_params.get("signout") == "1":
-    st.query_params.clear()
-    logout()
+# Sign-out is handled at the top of the script (before the auth gate).
 
 # ═══════════════════════════════════════════════════════════════════════════
 # SECTION FLAGS — same keys/state as before, just defaulted on
