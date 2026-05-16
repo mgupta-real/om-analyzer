@@ -18,17 +18,6 @@ st.set_page_config(
 # AUTH GATE — must come right after set_page_config
 # ══════════════════════════════════════════════════════════════════════════════
 from auth import login_page, logout
-
-# Handle sign-out FIRST, before the auth gate or any UI renders.
-# The navbar's "Sign out" link sets ?signout=1; we clear session + URL here.
-if st.query_params.get("signout") == "1":
-    try:
-        st.query_params.clear()
-    except Exception:
-        pass
-    st.session_state.clear()
-    st.rerun()
-
 if "user" not in st.session_state:
     login_page()
     st.stop()
@@ -2275,24 +2264,24 @@ st.markdown(f"""
           </div>
         </div>
         <div class="rv-profile-divider"></div>
-        <div role="button" tabindex="0" class="rv-profile-item rv-profile-item-danger"
-             onclick="(function(){{try{{var u=new URL(window.parent.location.href);u.searchParams.set('signout','1');window.parent.location.href=u.toString();}}catch(e){{window.top.location.search='?signout=1';}}}})();"
-             onkeydown="if(event.key==='Enter'||event.key===' '){{event.preventDefault();this.click();}}"
-             style="cursor:pointer;user-select:none;">
-          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" style="vertical-align:middle;margin-right:8px;pointer-events:none;">
+        <a href="?signout=1" class="rv-profile-item rv-profile-item-danger">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" style="vertical-align:middle;margin-right:8px;">
             <path d="M6 14H3.5C2.67 14 2 13.33 2 12.5v-9C2 2.67 2.67 2 3.5 2H6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
             <path d="M10.5 11L14 8L10.5 5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
             <path d="M14 8H6.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
           </svg>
           Sign out
-        </div>
+        </a>
       </div>
     </details>
   </div>
 </div>
 """, unsafe_allow_html=True)
 
-# Sign-out is handled at the top of the script (before the auth gate).
+# Handle sign-out triggered by the profile-menu link (?signout=1)
+if st.query_params.get("signout") == "1":
+    st.query_params.clear()
+    logout()
 
 # ═══════════════════════════════════════════════════════════════════════════
 # SECTION FLAGS — same keys/state as before, just defaulted on
