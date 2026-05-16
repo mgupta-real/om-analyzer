@@ -29,12 +29,16 @@ import base64, pathlib
 # ─── Logo loader (caches base64 of the brand logo for embedding) ──────────────
 @st.cache_data
 def _load_logo_b64():
-    """Load the RV mark (teal only, no wordmark) as base64.
-    The 'REALVAL' wordmark is rendered as separate HTML text in the navbar."""
+    """Load the combined RealVal nav logo (RV mark + 'REALVAL' wordmark together)
+    as base64. Falls back to other available logo assets if the preferred one
+    is missing."""
     try:
-        p = pathlib.Path(__file__).parent / "assets" / "realval_mark.png"
+        # Prefer the combined logo (mark + wordmark, white/teal on dark)
+        p = pathlib.Path(__file__).parent / "assets" / "realval_logo_navwhite.png"
         if not p.exists():
-            p = pathlib.Path(__file__).parent / "assets" / "realval_logo_navwhite.png"
+            p = pathlib.Path(__file__).parent / "assets" / "realval_logo_nav.png"
+        if not p.exists():
+            p = pathlib.Path(__file__).parent / "assets" / "realval_logo_transparent.png"
         if not p.exists():
             p = pathlib.Path(__file__).parent / "assets" / "realval_logo.png"
         if p.exists():
@@ -81,16 +85,25 @@ html, body, [class*="css"], .stApp, .main {{
     border-bottom: 1px solid #1A1A1A;
 }}
 .rv-nav-left {{ display: flex; align-items: center; gap: 14px; }}
-.rv-brand {{
+.rv-brand,
+.rv-brand:link,
+.rv-brand:visited,
+.rv-brand:hover,
+.rv-brand:active {{
     display: flex; align-items: center; gap: 10px;
-    text-decoration: none;
+    text-decoration: none !important;
+    border-bottom: none !important;
+}}
+.rv-brand * {{ text-decoration: none !important; }}
+.rv-logo-full {{
+    height: 32px; width: auto; display: block;
 }}
 .rv-mark {{
     height: 32px; width: auto; display: block;
 }}
 .rv-mark-fallback {{
-    color: #02A9A1; font-weight: 500; font-size: 22px;
-    letter-spacing: 0.5px;
+    color: #FFFFFF; font-weight: 500; font-size: 18px;
+    letter-spacing: 1.5px;
 }}
 .rv-wordmark {{
     color: #FFFFFF;
@@ -2223,9 +2236,9 @@ if st.session_state.get("user"):
 _avatar_initials = "".join(p[0].upper() for p in (_user_email.split("@")[0] or "U").replace(".", " ").split()[:2]) or "U"
 
 _logo_img_tag = (
-    f'<img src="data:image/png;base64,{_LOGO_B64}" alt="RV" class="rv-mark" />'
+    f'<img src="data:image/png;base64,{_LOGO_B64}" alt="RealVal" class="rv-logo-full" />'
     if _LOGO_B64 else
-    '<span class="rv-mark-fallback">RV</span>'
+    '<span class="rv-mark-fallback">RealVal</span>'
 )
 
 st.markdown(f"""
@@ -2233,7 +2246,6 @@ st.markdown(f"""
   <div class="rv-nav-left">
     <a href="https://therealval.com/" target="_blank" rel="noopener" class="rv-brand">
       {_logo_img_tag}
-      <span class="rv-wordmark">REALVAL</span>
     </a>
     <span class="rv-nav-tagline">OM Intelligence</span>
   </div>
